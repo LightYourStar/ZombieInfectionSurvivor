@@ -1,0 +1,28 @@
+/HybridCLRData/HotUpdateDlls
+/HybridCLRData/LocalIl2CppData
+/HybridCLRData/LocalIl2CppData-WindowsEditor
+/HybridCLRData/StrippedAOTDllsTempProj
+# AssembliesPostIl2CppStrip 需要提交到仓库，Jenkins 依赖它（跳过 StripAOT 步骤）
+# hybridclr_repo 和 il2cpp_plus_repo 需要提交到 git，BuildScript.InstallFromLocal 依赖它们
+/Test_BackUpThisFolder_ButDontShipItWithYourGame
+/Library
+/Logs
+/obj
+/.vs
+/.csproj
+/Temp
+/Assets/GUI PRO Kit - Casual Game/PSD
+/Assets/GUI PRO Kit - Casual Game/Scenes
+/BuildApp_BurstDebugInformation_DoNotShip
+/AB/BuildReport
+/AB/Full
+/AB/Package
+/AB/Packed
+/AB/Working
+/BuildApp
+/Tools/Jenkins/UnityBuildLog.log
+/Tools/LocalizationTextsScannerOutput.txt
+/Build
+*.csproj
+UserSettings/AndroidLogcatSettings.asset
+UserSettings/Layouts/default-2022.dwlt

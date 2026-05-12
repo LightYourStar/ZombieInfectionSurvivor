@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "ai-game-developer": {
+      "headers": {
+        "Authorization": "Bearer Za_bBdVC4wQVgML6IJZuwEUI-iWZKqvUSv2zf8nG9No"
+      },
+      "type": "http",
+      "url": "https://ai-game.dev/mcp",
+      "autoApprove": [
+        "gameobject-create",
+        "assets-material-create",
+        "assets-modify",
+        "gameobject-component-modify",
+        "script-execute",
+        "assets-find",
+        "gameobject-component-get"
+      ]
+    }
+  }
+}

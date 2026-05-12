@@ -51,6 +51,9 @@ namespace Game.Core
         [Tooltip("玩家控制器")]
         [SerializeField] private PlayerController m_playerController;
 
+        [Tooltip("虚拟摇杆（用于读取旋转方向）")]
+        [SerializeField] private VirtualJoystick m_joystick;
+
         [Header("游戏逻辑系统")]
         [Tooltip("人类刷新系统")]
         [SerializeField] private SpawnSystem m_spawnSystem;
@@ -94,6 +97,9 @@ namespace Game.Core
         /// </summary>
         private GameState m_currentState = GameState.Start;
 
+        /// <summary>升级面板弹出时暂停游戏逻辑</summary>
+        private bool m_isPaused;
+
         // ==================== Unity 生命周期 ====================
 
         private void Awake()
@@ -122,8 +128,8 @@ namespace Game.Core
 
         private void Update()
         {
-            // 仅在 Playing 状态下调度子系统更新
-            if (m_currentState == GameState.Playing)
+            // 仅在 Playing 状态下且未暂停时调度子系统更新
+            if (m_currentState == GameState.Playing && !m_isPaused)
             {
                 UpdatePlaying(Time.deltaTime);
             }
@@ -264,6 +270,11 @@ namespace Game.Core
             if (m_playerController != null)
             {
                 m_playerController.UpdateMovement(deltaTime);
+
+                // 玩家朝向旋转：读取当前移动方向，平滑旋转到该方向
+                Vector2 rotDir = GetCurrentInputDirection();
+                float rotSpeed = m_gameConfig != null ? m_gameConfig.PlayerRotationSpeed : 720f;
+                m_playerController.UpdateRotation(rotDir, rotSpeed, deltaTime);
             }
 
             // 2. 人类刷新（按间隔补充新 Human）
@@ -477,7 +488,8 @@ namespace Game.Core
         /// <param name="newLevel">升级后的新等级</param>
         private void HandleLevelUp(int newLevel)
         {
-            // 暂停倒计时
+            // 暂停游戏逻辑
+            m_isPaused = true;
             if (m_timerSystem != null)
             {
                 m_timerSystem.StopTimer();
@@ -515,6 +527,9 @@ namespace Game.Core
                 m_uiManager.HideUpgradePanel();
             }
 
+            // 恢复游戏
+            m_isPaused = false;
+
             // 恢复倒计时
             if (m_timerSystem != null)
             {
@@ -543,6 +558,26 @@ namespace Game.Core
         public void ResetSystems()
         {
             StartNewMatch();
+        }
+
+        // ==================== 输入辅助 ====================
+
+        /// <summary>
+        /// 获取当前帧的输入方向（摇杆 + 键盘取模长较大者），用于旋转调度。
+        /// </summary>
+        private Vector2 GetCurrentInputDirection()
+        {
+            Vector2 joystickDir = (m_joystick != null) ? m_joystick.Direction : Vector2.zero;
+
+            float kx = 0f, ky = 0f;
+            if (Input.GetKey(KeyCode.W)) ky += 1f;
+            if (Input.GetKey(KeyCode.S)) ky -= 1f;
+            if (Input.GetKey(KeyCode.A)) kx -= 1f;
+            if (Input.GetKey(KeyCode.D)) kx += 1f;
+            Vector2 keyDir = new Vector2(kx, ky);
+            if (keyDir.sqrMagnitude > 1f) keyDir.Normalize();
+
+            return (keyDir.sqrMagnitude > joystickDir.sqrMagnitude) ? keyDir : joystickDir;
         }
     }
 }

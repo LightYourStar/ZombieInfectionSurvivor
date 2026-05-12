@@ -25,7 +25,7 @@ namespace Game.UI
 
         [Header("摇杆视觉")]
         [Tooltip("摇杆可移动的 Handle 节点，通常为背景节点的子节点。按下/拖拽时 anchoredPosition 会被本组件覆盖。")]
-        [SerializeField] private RectTransform m_handle;
+        [SerializeField] protected RectTransform m_handle;
 
         // ==================== 参数 ====================
 
@@ -45,11 +45,11 @@ namespace Game.UI
         /// 当前输出的方向向量，模长始终满足 0 &lt;= |Direction| &lt;= 1。
         /// 未按下或释放时为 <see cref="Vector2.zero"/>。
         /// </summary>
-        public Vector2 Direction { get; private set; }
+        public Vector2 Direction { get; protected set; }
 
         // ==================== Unity 生命周期 ====================
 
-        private void Awake()
+        protected virtual void Awake()
         {
             m_backgroundRect = GetComponent<RectTransform>();
 
@@ -67,7 +67,7 @@ namespace Game.UI
         /// 手指/鼠标按下时调用，立即按当前指针位置刷新一次摇杆方向与 handle 位置。
         /// 这样即使玩家只是点击未拖拽，也能获得一次即时的方向输入。
         /// </summary>
-        public void OnPointerDown(PointerEventData eventData)
+        public virtual void OnPointerDown(PointerEventData eventData)
         {
             UpdateJoystick(eventData);
         }
@@ -75,7 +75,7 @@ namespace Game.UI
         /// <summary>
         /// 拖拽过程中持续调用，实时刷新方向向量与 handle 视觉位置。
         /// </summary>
-        public void OnDrag(PointerEventData eventData)
+        public virtual void OnDrag(PointerEventData eventData)
         {
             UpdateJoystick(eventData);
         }
@@ -83,7 +83,7 @@ namespace Game.UI
         /// <summary>
         /// 手指/鼠标释放时调用，将方向向量归零并把 handle 视觉复位到中心。
         /// </summary>
-        public void OnPointerUp(PointerEventData eventData)
+        public virtual void OnPointerUp(PointerEventData eventData)
         {
             Direction = Vector2.zero;
             if (m_handle != null)

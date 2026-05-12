@@ -136,6 +136,15 @@ namespace Game.Config
         /// <summary>每次升级经验倍率的增量。</summary>
         public float ExpMultiplierPerUpgrade => m_expMultiplierPerUpgrade;
 
+        // ==================== 玩家旋转 ====================
+
+        [Header("玩家旋转")]
+        [Tooltip("玩家朝向旋转速度（度/秒），值越大转向越快")]
+        [SerializeField] private float m_playerRotationSpeed = 720f;
+
+        /// <summary>玩家朝向旋转速度（度/秒）。</summary>
+        public float PlayerRotationSpeed => m_playerRotationSpeed;
+
         // ==================== 单局时长 ====================
 
         [Header("单局时长")]

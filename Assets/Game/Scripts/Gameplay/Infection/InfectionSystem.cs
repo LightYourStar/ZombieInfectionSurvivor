@@ -42,6 +42,13 @@ namespace Game.Gameplay.Infection
         [Tooltip("玩家 Transform，作为感染源与僵尸同伴 AI 的跟随目标")]
         [SerializeField] private Transform m_playerTransform;
 
+        [Header("僵尸站位")]
+        [Tooltip("僵尸同伴之间希望保持的最小间距，用于运行时解重叠")]
+        [SerializeField, Min(0f)] private float m_zombieSeparationRadius = 0.8f;
+
+        [Tooltip("每帧解重叠迭代次数；值越大分离越稳定，但开销也略高")]
+        [SerializeField, Min(1)] private int m_zombieSeparationIterations = 2;
+
         // ==================== 运行时状态 ====================
 
         /// <summary>玩家运行时属性，提供感染半径与僵尸同伴上限；由 <see cref="Initialize"/> 注入</summary>
@@ -136,12 +143,6 @@ namespace Game.Gameplay.Infection
                 return false;
             }
 
-            // 上限约束（Requirement 5.4）：达到上限时不执行任何转化
-            if (m_activeZombies.Count >= m_playerStats.ZombieCompanionCap)
-            {
-                return false;
-            }
-
             // 先缓存位置，标记后 Human 即将被回收，位置可能被重置
             Vector2 pos = human.Position;
 
@@ -156,17 +157,26 @@ namespace Game.Gameplay.Infection
                 Debug.LogError("[InfectionSystem] SpawnSystem 未赋值，无法正确回收被感染的 Human");
             }
 
+            // 无论是否达到上限，感染成功都触发事件（给经验金币），保持割草爽感不中断
+            GameEvents.RaiseInfectionSuccess(pos);
+
+            // 上限约束（Requirement 5.4）：达到上限时不生成新 ZombieCompanion，但感染本身仍然成功
+            if (m_activeZombies.Count >= m_playerStats.ZombieCompanionCap)
+            {
+                return true;
+            }
+
             if (m_poolManager == null)
             {
                 Debug.LogError("[InfectionSystem] ObjectPoolManager 未赋值，无法生成 ZombieCompanion");
-                return false;
+                return true; // 感染已成功（人类已消灭），只是无法生成僵尸
             }
 
             ZombieCompanionUnit zombie = m_poolManager.GetZombie();
             if (zombie == null)
             {
                 Debug.LogError("[InfectionSystem] ObjectPoolManager.GetZombie 返回 null，转化失败");
-                return false;
+                return true; // 感染已成功
             }
 
             // 保留原 Prefab 的 Z 轴（2D 场景一般为 0）；显式写入以避免继承到错误深度
@@ -184,7 +194,6 @@ namespace Game.Gameplay.Infection
                 Debug.LogWarning("[InfectionSystem] ZombieCompanion 预制体缺少 ZombieCompanionAI 组件，新单位将无 AI 行为");
             }
 
-            GameEvents.RaiseInfectionSuccess(pos);
             return true;
         }
 
@@ -276,6 +285,74 @@ namespace Game.Gameplay.Infection
                 {
                     ai.UpdateAI(deltaTime);
                 }
+
+                ClampZombieToMap(zombie);
+            }
+
+            ResolveZombieOverlaps();
+        }
+
+        private void ResolveZombieOverlaps()
+        {
+            if (m_zombieSeparationRadius <= 0f || m_activeZombies.Count < 2)
+            {
+                return;
+            }
+
+            float minDistance = m_zombieSeparationRadius;
+            float minDistanceSqr = minDistance * minDistance;
+
+            for (int iteration = 0; iteration < m_zombieSeparationIterations; iteration++)
+            {
+                for (int i = 0; i < m_activeZombies.Count; i++)
+                {
+                    ZombieCompanionUnit a = m_activeZombies[i];
+                    if (a == null)
+                    {
+                        continue;
+                    }
+
+                    for (int j = i + 1; j < m_activeZombies.Count; j++)
+                    {
+                        ZombieCompanionUnit b = m_activeZombies[j];
+                        if (b == null)
+                        {
+                            continue;
+                        }
+
+                        Vector2 posA = a.Position;
+                        Vector2 posB = b.Position;
+                        Vector2 delta = posB - posA;
+                        float sqrDistance = delta.sqrMagnitude;
+                        if (sqrDistance >= minDistanceSqr)
+                        {
+                            continue;
+                        }
+
+                        Vector2 pushDirection;
+                        float distance;
+                        if (sqrDistance > Mathf.Epsilon)
+                        {
+                            distance = Mathf.Sqrt(sqrDistance);
+                            pushDirection = delta / distance;
+                        }
+                        else
+                        {
+                            distance = 0f;
+                            pushDirection = GetDeterministicSplitDirection(a, b);
+                        }
+
+                        float overlap = minDistance - distance;
+                        if (overlap <= 0f)
+                        {
+                            continue;
+                        }
+
+                        Vector2 correction = pushDirection * (overlap * 0.5f);
+                        ApplyZombiePosition(a, posA - correction);
+                        ApplyZombiePosition(b, posB + correction);
+                    }
+                }
             }
         }
 
@@ -311,6 +388,35 @@ namespace Game.Gameplay.Infection
         private IReadOnlyList<HumanUnit> GetActiveHumansLazy()
         {
             return m_spawnSystem != null ? m_spawnSystem.ActiveHumans : null;
+        }
+
+        private void ClampZombieToMap(ZombieCompanionUnit zombie)
+        {
+            if (zombie == null || m_spawnSystem == null)
+            {
+                return;
+            }
+
+            ApplyZombiePosition(zombie, m_spawnSystem.ClampToMap(zombie.Position));
+        }
+
+        private void ApplyZombiePosition(ZombieCompanionUnit zombie, Vector2 position)
+        {
+            if (zombie == null)
+            {
+                return;
+            }
+
+            Vector2 finalPosition = m_spawnSystem != null ? m_spawnSystem.ClampToMap(position) : position;
+            Vector3 world = zombie.transform.position;
+            zombie.transform.position = new Vector3(finalPosition.x, finalPosition.y, world.z);
+        }
+
+        private Vector2 GetDeterministicSplitDirection(ZombieCompanionUnit a, ZombieCompanionUnit b)
+        {
+            int mixed = a.GetInstanceID() * 486187739 ^ b.GetInstanceID() * 16777619;
+            float angle = Mathf.Abs(mixed % 360) * Mathf.Deg2Rad;
+            return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
         }
     }
 }

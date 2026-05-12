@@ -192,7 +192,19 @@ namespace Game.Gameplay.Zombie
             {
                 // 2a. 有目标：切换为追击状态，沿目标方向移动
                 m_unit.EnterChasing();
-                moveDirection = CalculateMoveDirection(selfPos, target.Position);
+                Vector2 targetPos = target.Position;
+                float sqrDistToTarget = (targetPos - selfPos).sqrMagnitude;
+
+                // 到达目标附近后停止（感染系统会处理转化），避免完全重叠
+                float stopDist = 0.3f;
+                if (sqrDistToTarget <= stopDist * stopDist)
+                {
+                    moveDirection = Vector2.zero;
+                }
+                else
+                {
+                    moveDirection = CalculateMoveDirection(selfPos, targetPos);
+                }
             }
             else
             {
@@ -202,7 +214,18 @@ namespace Game.Gameplay.Zombie
                 {
                     Vector3 playerWorld = m_playerTransform.position;
                     Vector2 playerPos = new Vector2(playerWorld.x, playerWorld.y);
-                    moveDirection = CalculateMoveDirection(selfPos, playerPos);
+
+                    // 到达玩家附近一定距离后停止移动，避免所有僵尸堆叠在玩家脚下
+                    float sqrDistToPlayer = (playerPos - selfPos).sqrMagnitude;
+                    float followStopDistance = 2.0f; // 停止跟随的最小距离
+                    if (sqrDistToPlayer <= followStopDistance * followStopDistance)
+                    {
+                        moveDirection = Vector2.zero;
+                    }
+                    else
+                    {
+                        moveDirection = CalculateMoveDirection(selfPos, playerPos);
+                    }
                 }
                 else
                 {
@@ -210,9 +233,14 @@ namespace Game.Gameplay.Zombie
                 }
             }
 
-            // 3. 应用位移：displacement = direction * zombieCompanionSpeed * deltaTime（direction 已为单位向量或零向量）
+            // 3. 应用位移 + 分离力
+            // 当静止时（跟随停止或追击停止），施加随机漂移避免重叠
             if (moveDirection.sqrMagnitude < Mathf.Epsilon)
             {
+                // 每帧都施加微小随机漂移，让静止的僵尸自然散开
+                Vector2 jitter = UnityEngine.Random.insideUnitCircle * 0.3f * deltaTime;
+                Vector3 pos = transform.position;
+                transform.position = new Vector3(pos.x + jitter.x, pos.y + jitter.y, pos.z);
                 return;
             }
 

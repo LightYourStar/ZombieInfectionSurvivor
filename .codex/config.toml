@@ -4,3 +4,6 @@ enabled = true
 startup_timeout_sec = 30
 tool_timeout_sec = 300
 url = "https://ai-game.dev/mcp"
+
+[mcp_servers.ai-game-developer.http_headers]
+Authorization = "Bearer Za_bBdVC4wQVgML6IJZuwEUI-iWZKqvUSv2zf8nG9No"

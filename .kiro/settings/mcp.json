@@ -28,7 +28,12 @@
         "assets-prefab-close",
         "scene-open",
         "scene-list-opened",
-        "gameobject-destroy"
+        "gameobject-destroy",
+        "gameobject-component-destroy",
+        "assets-prefab-save",
+        "object-get-data",
+        "tool-list",
+        "object-modify"
       ]
     }
   }

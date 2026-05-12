@@ -38,10 +38,10 @@ namespace Game.Gameplay.Wave
 
         [Header("刷新区域")]
         [Tooltip("刷新地图范围左下角（XY 世界坐标）")]
-        [SerializeField] private Vector2 m_mapMin = new Vector2(-20f, -20f);
+        [SerializeField] private Vector2 m_mapMin = new Vector2(-50f, -50f);
 
         [Tooltip("刷新地图范围右上角（XY 世界坐标）")]
-        [SerializeField] private Vector2 m_mapMax = new Vector2(20f, 20f);
+        [SerializeField] private Vector2 m_mapMax = new Vector2(50f, 50f);
 
         [Tooltip("刷新点与玩家的最小距离，确保人类在玩家视野外生成")]
         [SerializeField, Min(0f)] private float m_spawnMinDistanceFromPlayer = 8f;
@@ -68,6 +68,12 @@ namespace Game.Gameplay.Wave
 
         /// <summary>当前场上活跃的 Human 数量</summary>
         public int ActiveHumanCount => m_activeHumans.Count;
+
+        /// <summary>刷新 / 活动区域左下角。</summary>
+        public Vector2 MapMin => m_mapMin;
+
+        /// <summary>刷新 / 活动区域右上角。</summary>
+        public Vector2 MapMax => m_mapMax;
 
         /// <summary>
         /// 当前场上活跃的 Human 只读列表。
@@ -193,6 +199,8 @@ namespace Game.Gameplay.Wave
                 {
                     ai.UpdateAI(deltaTime);
                 }
+
+                ClampUnitToMap(human.transform);
             }
         }
 
@@ -317,6 +325,28 @@ namespace Game.Gameplay.Wave
 
             // 超过尝试次数：退化为任意随机位置（使用最后一次 candidate，避免再调用一次 Random）
             return candidate;
+        }
+
+        /// <summary>
+        /// 将二维位置钳制回当前地图矩形范围，避免单位跑到玩家不可到达的区域之外。
+        /// </summary>
+        public Vector2 ClampToMap(Vector2 position)
+        {
+            return new Vector2(
+                Mathf.Clamp(position.x, m_mapMin.x, m_mapMax.x),
+                Mathf.Clamp(position.y, m_mapMin.y, m_mapMax.y));
+        }
+
+        private void ClampUnitToMap(Transform target)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            Vector3 world = target.position;
+            Vector2 clamped = ClampToMap(new Vector2(world.x, world.y));
+            target.position = new Vector3(clamped.x, clamped.y, world.z);
         }
 
         /// <summary>

@@ -31,10 +31,10 @@ namespace Game.Gameplay.Player
 
         [Header("地图边界")]
         [Tooltip("地图在世界坐标系下的最小边界（x、y），玩家位置会被钳制到此范围内")]
-        [SerializeField] private Vector2 m_mapMin = new Vector2(-20f, -20f);
+        [SerializeField] private Vector2 m_mapMin = new Vector2(-50f, -50f);
 
         [Tooltip("地图在世界坐标系下的最大边界（x、y），玩家位置会被钳制到此范围内")]
-        [SerializeField] private Vector2 m_mapMax = new Vector2(20f, 20f);
+        [SerializeField] private Vector2 m_mapMax = new Vector2(50f, 50f);
 
         // ==================== 运行时依赖 ====================
 
@@ -141,6 +141,44 @@ namespace Game.Gameplay.Player
             }
 
             return dir;
+        }
+
+        // ==================== 朝向旋转 ====================
+
+        /// <summary>
+        /// 根据输入方向平滑旋转玩家朝向。
+        /// 方向为零时保持当前朝向不变（Requirement 1.2）。
+        /// 使用 Mathf.MoveTowardsAngle 实现平滑插值，旋转速度由 GameConfig.PlayerRotationSpeed 决定。
+        /// </summary>
+        /// <param name="direction">当前帧的输入方向向量</param>
+        /// <param name="rotationSpeed">旋转速度（度/秒）</param>
+        /// <param name="deltaTime">本帧时间增量</param>
+        public void UpdateRotation(Vector2 direction, float rotationSpeed, float deltaTime)
+        {
+            // 方向为零时不旋转，保持当前朝向
+            if (direction.sqrMagnitude < 0.001f)
+            {
+                return;
+            }
+
+            if (deltaTime <= 0f)
+            {
+                return;
+            }
+
+            // 计算目标角度（2D 俯视角，Z 轴旋转）
+            // Atan2(y, x) 返回弧度，-90° 偏移使 +Y 方向对应 0°（三角形尖端朝上）
+            float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f;
+
+            float currentAngle = transform.eulerAngles.z;
+
+            // MoveTowardsAngle 自动处理 360° 环绕，保证最短路径旋转
+            float newAngle = Mathf.MoveTowardsAngle(
+                currentAngle,
+                targetAngle,
+                rotationSpeed * deltaTime);
+
+            transform.eulerAngles = new Vector3(0f, 0f, newAngle);
         }
     }
 }

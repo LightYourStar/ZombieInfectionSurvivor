@@ -13,7 +13,22 @@
         "gameobject-component-modify",
         "script-execute",
         "assets-find",
-        "gameobject-component-get"
+        "gameobject-component-get",
+        "assets-refresh",
+        "console-get-logs",
+        "assets-refresh",
+        "scene-create",
+        "scene-get-data",
+        "gameobject-component-add",
+        "assets-prefab-instantiate",
+        "gameobject-find",
+        "scene-save",
+        "assets-get-data",
+        "assets-prefab-open",
+        "assets-prefab-close",
+        "scene-open",
+        "scene-list-opened",
+        "gameobject-destroy"
       ]
     }
   }

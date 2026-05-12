@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ac02e026e35380448a55849cacd30a55, type: 3}
+  m_Name: GameConfig
+  m_EditorClassIdentifier: 
+  m_playerBaseSpeed: 5
+  m_playerBaseInfectionRadius: 1.5
+  m_humanMoveSpeed: 3
+  m_humanPerceptionRadius: 4
+  m_humanMaxCount: 50
+  m_humanInitialCount: 20
+  m_humanSpawnInterval: 1
+  m_zombieCompanionSpeed: 4
+  m_zombieCompanionPerceptionRadius: 5
+  m_zombieCompanionMaxCount: 30
+  m_baseInfectionRadius: 1.5
+  m_expPerInfection: 5
+  m_goldPerInfection: 1
+  m_expThresholds: 0a00000019000000320000005a00000096000000e60000004a010000c20100005802000020030000
+  m_infectionRadiusPerUpgrade: 0.3
+  m_speedPerUpgrade: 0.5
+  m_zombieCapPerUpgrade: 5
+  m_expMultiplierPerUpgrade: 0.1
+  m_matchDuration: 240
+  m_humanPoolInitialSize: 60
+  m_zombiePoolInitialSize: 40

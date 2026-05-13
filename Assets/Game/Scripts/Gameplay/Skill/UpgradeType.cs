@@ -2,13 +2,7 @@ namespace Game.Gameplay.Skill
 {
     /// <summary>
     /// 升级项枚举，覆盖局内升级和局外永久升级两个维度使用的升级类型。
-    /// 局内 <see cref="Game.Gameplay.Player.PlayerStats"/> 以此枚举作为 ApplyUpgrade 的路由键，
-    /// 局外 MetaUpgrade 轨道（见 <see cref="Game.Config.MetaUpgradeConfig"/>）与该枚举一一对应。
     /// </summary>
-    /// <remarks>
-    /// 本枚举预先在此声明，便于任务 4.3 PlayerStats 先行引用；
-    /// 任务 9.4 中 UpgradeOption 数据类会基于该枚举扩展局内升级选项定义。
-    /// </remarks>
     public enum UpgradeType
     {
         /// <summary>感染半径加成</summary>
@@ -21,6 +15,26 @@ namespace Game.Gameplay.Skill
         ZombieCompanionCap,
 
         /// <summary>经验获取倍率加成</summary>
-        ExpMultiplier
+        ExpMultiplier,
+
+        // ==================== 2.0 新增升级类型 ====================
+
+        /// <summary>连锁强化：感染爆发额外目标 +1</summary>
+        ChainPlusOne,
+
+        /// <summary>扩散毒圈：感染爆发半径 +20%</summary>
+        BurstRadiusUp,
+
+        /// <summary>新生狂奔：新生僵尸冲刺时间 +0.35 秒</summary>
+        NewbornRushDurationUp,
+
+        /// <summary>尸群嗅觉：僵尸感知范围 +25%</summary>
+        ZombiePerceptionUp,
+
+        /// <summary>狂潮提前：最终狂潮提前 10 秒开始</summary>
+        FinalFrenzyEarly,
+
+        /// <summary>回响爆发：每第 5 次感染额外触发一次小范围爆发</summary>
+        EchoBurst
     }
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Game.Config;
 using Game.Gameplay.Enemy;
+using Game.Gameplay.Skill;
 using Game.Utility;
 using UnityEngine;
 
@@ -48,6 +49,9 @@ namespace Game.Gameplay.Zombie
 
         /// <summary>玩家 Transform，作为无目标时的跟随对象；为 null 时僵尸同伴在无目标情况下保持静止</summary>
         private Transform m_playerTransform;
+
+        /// <summary>当前局升级状态，提供感知范围和冲刺时间修正</summary>
+        private SessionUpgradeState m_sessionState;
 
         /// <summary>
         /// 获取当前活跃 Human 列表的委托。
@@ -97,7 +101,7 @@ namespace Game.Gameplay.Zombie
         /// 获取当前活跃 Human 列表的惰性委托；为 null 时视作当前无可追击目标，僵尸同伴只会执行跟随行为。
         /// 委托每帧被调用一次，调用方应保证其轻量（建议返回已缓存列表的只读视图）。
         /// </param>
-        public void Initialize(GameConfig config, Transform playerTransform, Func<IReadOnlyList<HumanUnit>> getActiveHumans)
+        public void Initialize(GameConfig config, Transform playerTransform, Func<IReadOnlyList<HumanUnit>> getActiveHumans, SessionUpgradeState sessionState = null)
         {
             if (config == null)
             {
@@ -107,6 +111,7 @@ namespace Game.Gameplay.Zombie
             m_config = config;
             m_playerTransform = playerTransform;
             m_getActiveHumans = getActiveHumans;
+            m_sessionState = sessionState;
 
             // 重置冲刺状态（对象池复用时清理残留）
             m_rushRemainingTime = 0f;
@@ -122,7 +127,12 @@ namespace Game.Gameplay.Zombie
             {
                 return;
             }
-            m_rushRemainingTime = m_config.NewbornRushDuration;
+            float duration = m_config.NewbornRushDuration;
+            if (m_sessionState != null)
+            {
+                duration = m_sessionState.GetNewbornRushDuration(duration);
+            }
+            m_rushRemainingTime = duration;
             ApplyRushVisual();
         }
 
@@ -381,7 +391,12 @@ namespace Game.Gameplay.Zombie
             }
 
             // 范围判定单独一步，避免把感知半径耦合进纯函数 FindNearestTarget
-            if (!MathUtils.IsWithinRange(selfPos, nearest.Position, m_config.ZombieCompanionPerceptionRadius))
+            float perceptionRadius = m_config.ZombieCompanionPerceptionRadius;
+            if (m_sessionState != null)
+            {
+                perceptionRadius = m_sessionState.GetZombiePerceptionRadius(perceptionRadius);
+            }
+            if (!MathUtils.IsWithinRange(selfPos, nearest.Position, perceptionRadius))
             {
                 return null;
             }

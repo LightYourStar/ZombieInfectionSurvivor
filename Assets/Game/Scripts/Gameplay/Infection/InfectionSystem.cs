@@ -3,6 +3,7 @@ using Game.Config;
 using Game.Core;
 using Game.Gameplay.Enemy;
 using Game.Gameplay.Player;
+using Game.Gameplay.Skill;
 using Game.Gameplay.Wave;
 using Game.Gameplay.Zombie;
 using Game.Utility;
@@ -54,6 +55,9 @@ namespace Game.Gameplay.Infection
         /// <summary>玩家运行时属性，提供感染半径与僵尸同伴上限；由 <see cref="Initialize"/> 注入</summary>
         private PlayerStats m_playerStats;
 
+        /// <summary>当前局升级状态，提供 2.0 升级修正值；由 <see cref="Initialize"/> 注入</summary>
+        private SessionUpgradeState m_sessionUpgradeState;
+
         /// <summary>当前场上活跃的 ZombieCompanion 列表</summary>
         private readonly List<ZombieCompanionUnit> m_activeZombies = new List<ZombieCompanionUnit>();
 
@@ -66,8 +70,14 @@ namespace Game.Gameplay.Infection
         /// <summary>感染爆发时用于暂存二次感染目标，避免递归和 GC 分配</summary>
         private readonly List<HumanUnit> m_burstBuffer = new List<HumanUnit>();
 
-        /// <summary>标记当前帧是否正在执行爆发感染，防止递归无限传播</summary>
+        /// <summary>回响爆发独立缓冲区，避免与普通 Burst 共用 m_burstBuffer 导致互相 Clear</summary>
+        private readonly List<HumanUnit> m_echoBurstBuffer = new List<HumanUnit>();
+
+        /// <summary>标记当前帧是否正在执行普通感染爆发，防止 Burst 递归</summary>
         private bool m_isBurstInProgress;
+
+        /// <summary>标记当前帧是否正在执行回响爆发，防止 EchoBurst 递归触发自身</summary>
+        private bool m_isEchoBurstInProgress;
 
         // ==================== 公开属性 ====================
 
@@ -87,13 +97,15 @@ namespace Game.Gameplay.Infection
         /// 由 GameSystemRunner 在进入 Playing 状态前调用。
         /// </summary>
         /// <param name="playerStats">玩家运行时属性；为 null 时感染检测将被跳过</param>
-        public void Initialize(PlayerStats playerStats)
+        /// <param name="sessionState">当前局升级状态；为 null 时使用 GameConfig 基础值</param>
+        public void Initialize(PlayerStats playerStats, SessionUpgradeState sessionState = null)
         {
             if (playerStats == null)
             {
                 Debug.LogError("[InfectionSystem] Initialize 收到空的 PlayerStats，感染检测将被跳过");
             }
             m_playerStats = playerStats;
+            m_sessionUpgradeState = sessionState;
         }
 
         // ==================== 公开 API ====================
@@ -172,6 +184,17 @@ namespace Game.Gameplay.Infection
                 TryInfectionBurst(pos);
             }
 
+            // 回响爆发计数：所有非 EchoBurst 来源的感染都计入（包括玩家直接感染和普通 Burst 产生的感染）。
+            // 只有 EchoBurst 自己触发的感染不计入，避免递归。
+            if (!m_isEchoBurstInProgress && m_sessionUpgradeState != null && m_sessionUpgradeState.IsEchoBurstActive)
+            {
+                m_sessionUpgradeState.InfectionCounter++;
+                if (m_sessionUpgradeState.InfectionCounter % 5 == 0)
+                {
+                    TryEchoBurst(pos);
+                }
+            }
+
             // 上限约束（Requirement 5.4）：达到上限时不生成新 ZombieCompanion，但感染本身仍然成功
             if (m_activeZombies.Count >= m_playerStats.ZombieCompanionCap)
             {
@@ -199,7 +222,7 @@ namespace Game.Gameplay.Infection
             ZombieCompanionAI ai = zombie.GetComponent<ZombieCompanionAI>();
             if (ai != null)
             {
-                ai.Initialize(m_config, m_playerTransform, GetActiveHumansLazy);
+                ai.Initialize(m_config, m_playerTransform, GetActiveHumansLazy, m_sessionUpgradeState);
 
                 // 新生僵尸冲刺：刚转化的僵尸获得短时间加速
                 ai.StartNewbornRush();
@@ -392,6 +415,10 @@ namespace Game.Gameplay.Infection
             m_activeZombies.Clear();
             m_zombiePositionsCache.Clear();
             m_pendingInfectionBuffer.Clear();
+            m_burstBuffer.Clear();
+            m_echoBurstBuffer.Clear();
+            m_isBurstInProgress = false;
+            m_isEchoBurstInProgress = false;
         }
 
         // ==================== 内部辅助 ====================
@@ -411,6 +438,13 @@ namespace Game.Gameplay.Infection
 
             float burstRadius = m_config.InfectionBurstRadius;
             int maxTargets = m_config.InfectionBurstMaxTargets;
+
+            // 应用 SessionUpgradeState 修正
+            if (m_sessionUpgradeState != null)
+            {
+                burstRadius = m_sessionUpgradeState.GetBurstRadius(burstRadius);
+                maxTargets = m_sessionUpgradeState.GetBurstMaxTargets(maxTargets);
+            }
 
             if (burstRadius <= 0f || maxTargets <= 0)
             {
@@ -451,6 +485,78 @@ namespace Game.Gameplay.Infection
 
             m_isBurstInProgress = false;
             m_burstBuffer.Clear();
+        }
+
+        /// <summary>
+        /// 回响爆发：使用较小范围（当前爆发半径的 70%），最多额外感染 1 个目标。
+        /// 使用独立的 m_echoBurstBuffer 避免与普通 Burst 的 m_burstBuffer 冲突。
+        /// 设计选择：EchoBurst 触发的感染不会再触发普通 InfectionBurst，
+        /// 确保"额外 1 个目标"的承诺不会因连锁而膨胀。
+        /// </summary>
+        private void TryEchoBurst(Vector2 burstCenter)
+        {
+            if (m_spawnSystem == null || m_config == null)
+            {
+                return;
+            }
+
+            float baseRadius = m_config.InfectionBurstRadius;
+            if (m_sessionUpgradeState != null)
+            {
+                baseRadius = m_sessionUpgradeState.GetBurstRadius(baseRadius);
+            }
+
+            float echoRadius = baseRadius * 0.7f;
+            int echoMaxTargets = 1;
+
+            if (echoRadius <= 0f)
+            {
+                return;
+            }
+
+            float sqrEchoRadius = echoRadius * echoRadius;
+            bool wasBurstInProgress = m_isBurstInProgress;
+            bool wasEchoBurstInProgress = m_isEchoBurstInProgress;
+
+            m_echoBurstBuffer.Clear();
+            IReadOnlyList<HumanUnit> activeHumans = m_spawnSystem.ActiveHumans;
+            for (int i = 0; i < activeHumans.Count; i++)
+            {
+                HumanUnit human = activeHumans[i];
+                if (human == null || human.IsInfected)
+                {
+                    continue;
+                }
+
+                float sqrDist = (human.Position - burstCenter).sqrMagnitude;
+                if (sqrDist < sqrEchoRadius)
+                {
+                    m_echoBurstBuffer.Add(human);
+                    if (m_echoBurstBuffer.Count >= echoMaxTargets)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            // 同时设置两个标记：
+            // - m_isEchoBurstInProgress：防止 EchoBurst 递归触发自身
+            // - m_isBurstInProgress：防止 Echo 触发的感染再触发普通 Burst（收紧影响范围）
+            m_isEchoBurstInProgress = true;
+            m_isBurstInProgress = true;
+            try
+            {
+                for (int i = 0; i < m_echoBurstBuffer.Count; i++)
+                {
+                    TryInfect(m_echoBurstBuffer[i]);
+                }
+            }
+            finally
+            {
+                m_isBurstInProgress = wasBurstInProgress;
+                m_isEchoBurstInProgress = wasEchoBurstInProgress;
+                m_echoBurstBuffer.Clear();
+            }
         }
 
         /// <summary>

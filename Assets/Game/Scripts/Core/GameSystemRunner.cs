@@ -210,22 +210,23 @@ namespace Game.Core
                     : null);
             }
 
-            // 6. 初始化感染系统
-            if (m_infectionSystem != null)
-            {
-                m_infectionSystem.Initialize(m_playerStats);
-            }
-
-            // 7. 初始化经验系统
+            // 6. 初始化经验系统
             if (m_experienceSystem != null)
             {
                 m_experienceSystem.Initialize(m_playerStats);
             }
 
-            // 8. 初始化升级系统
+            // 7. 初始化升级系统（必须在 InfectionSystem 之前，因为 InfectionSystem 需要 SessionUpgradeState）
             if (m_upgradeSystem != null)
             {
                 m_upgradeSystem.Initialize(m_playerStats);
+            }
+
+            // 8. 初始化感染系统（注入 SessionUpgradeState）
+            if (m_infectionSystem != null)
+            {
+                SessionUpgradeState sessionState = m_upgradeSystem != null ? m_upgradeSystem.SessionState : null;
+                m_infectionSystem.Initialize(m_playerStats, sessionState);
             }
 
             // 初始化单局控制器
@@ -699,7 +700,15 @@ namespace Game.Core
                 return;
             }
 
-            if (m_timerSystem.RemainingTime <= m_gameConfig.FinalFrenzyStartRemainingTime)
+            // 使用 SessionUpgradeState 修正后的触发时间（FinalFrenzyEarly 升级可提前触发）
+            float triggerTime = m_gameConfig.FinalFrenzyStartRemainingTime;
+            SessionUpgradeState sessionState = m_upgradeSystem != null ? m_upgradeSystem.SessionState : null;
+            if (sessionState != null)
+            {
+                triggerTime = sessionState.GetFinalFrenzyStartTime(triggerTime);
+            }
+
+            if (m_timerSystem.RemainingTime <= triggerTime)
             {
                 m_finalFrenzyTriggered = true;
                 GameEvents.RaiseFinalFrenzyStarted();

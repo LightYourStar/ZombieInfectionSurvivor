@@ -63,6 +63,12 @@ namespace Game.Gameplay.Infection
         /// <summary>每帧感染判定时用于暂存本帧将被感染的 Human，避免遍历活跃列表时发生修改</summary>
         private readonly List<HumanUnit> m_pendingInfectionBuffer = new List<HumanUnit>();
 
+        /// <summary>感染爆发时用于暂存二次感染目标，避免递归和 GC 分配</summary>
+        private readonly List<HumanUnit> m_burstBuffer = new List<HumanUnit>();
+
+        /// <summary>标记当前帧是否正在执行爆发感染，防止递归无限传播</summary>
+        private bool m_isBurstInProgress;
+
         // ==================== 公开属性 ====================
 
         /// <summary>当前活跃 ZombieCompanion 数量</summary>
@@ -160,6 +166,12 @@ namespace Game.Gameplay.Infection
             // 无论是否达到上限，感染成功都触发事件（给经验金币），保持割草爽感不中断
             GameEvents.RaiseInfectionSuccess(pos);
 
+            // 感染爆发：以感染点为中心做一次小范围二次感染检测（仅一层，不递归）
+            if (!m_isBurstInProgress && m_config != null && m_config.EnableInfectionBurst)
+            {
+                TryInfectionBurst(pos);
+            }
+
             // 上限约束（Requirement 5.4）：达到上限时不生成新 ZombieCompanion，但感染本身仍然成功
             if (m_activeZombies.Count >= m_playerStats.ZombieCompanionCap)
             {
@@ -188,6 +200,9 @@ namespace Game.Gameplay.Infection
             if (ai != null)
             {
                 ai.Initialize(m_config, m_playerTransform, GetActiveHumansLazy);
+
+                // 新生僵尸冲刺：刚转化的僵尸获得短时间加速
+                ai.StartNewbornRush();
             }
             else
             {
@@ -380,6 +395,63 @@ namespace Game.Gameplay.Infection
         }
 
         // ==================== 内部辅助 ====================
+
+        /// <summary>
+        /// 感染爆发：以感染点为中心，在 BurstRadius 范围内寻找额外的 Human 并感染。
+        /// 单次爆发最多额外感染 BurstMaxTargets 个目标。
+        /// 通过 m_isBurstInProgress 标记防止递归无限传播（爆发触发的 TryInfect 不会再次触发爆发）。
+        /// </summary>
+        /// <param name="burstCenter">爆发中心位置（被感染 Human 的原始位置）</param>
+        private void TryInfectionBurst(Vector2 burstCenter)
+        {
+            if (m_spawnSystem == null || m_config == null)
+            {
+                return;
+            }
+
+            float burstRadius = m_config.InfectionBurstRadius;
+            int maxTargets = m_config.InfectionBurstMaxTargets;
+
+            if (burstRadius <= 0f || maxTargets <= 0)
+            {
+                return;
+            }
+
+            float sqrBurstRadius = burstRadius * burstRadius;
+
+            // 收集爆发范围内的候选目标
+            m_burstBuffer.Clear();
+            IReadOnlyList<HumanUnit> activeHumans = m_spawnSystem.ActiveHumans;
+            for (int i = 0; i < activeHumans.Count; i++)
+            {
+                HumanUnit human = activeHumans[i];
+                if (human == null || human.IsInfected)
+                {
+                    continue;
+                }
+
+                float sqrDist = (human.Position - burstCenter).sqrMagnitude;
+                if (sqrDist < sqrBurstRadius)
+                {
+                    m_burstBuffer.Add(human);
+                    if (m_burstBuffer.Count >= maxTargets)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            // 标记爆发进行中，防止递归
+            m_isBurstInProgress = true;
+
+            for (int i = 0; i < m_burstBuffer.Count; i++)
+            {
+                TryInfect(m_burstBuffer[i]);
+            }
+
+            m_isBurstInProgress = false;
+            m_burstBuffer.Clear();
+        }
 
         /// <summary>
         /// 用于 ZombieCompanionAI 的惰性委托：每帧按需返回 <see cref="SpawnSystem.ActiveHumans"/>。

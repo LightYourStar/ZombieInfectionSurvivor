@@ -149,6 +149,21 @@ namespace Game.Core
             OnInfectionCountChanged?.Invoke(current, target);
         }
 
+        // ==================== 末日狂潮事件 ====================
+
+        /// <summary>
+        /// 末日狂潮开始事件，当剩余时间 <= 阈值时触发一次，供 HUD 和 HumanClusterSpawner 订阅
+        /// </summary>
+        public static event Action OnFinalFrenzyStarted;
+
+        /// <summary>
+        /// 触发末日狂潮开始事件
+        /// </summary>
+        public static void RaiseFinalFrenzyStarted()
+        {
+            OnFinalFrenzyStarted?.Invoke();
+        }
+
         // ==================== 清理 ====================
 
         /// <summary>
@@ -165,6 +180,7 @@ namespace Game.Core
             OnGoldChanged = null;
             OnSessionStateChanged = null;
             OnInfectionCountChanged = null;
+            OnFinalFrenzyStarted = null;
         }
     }
 }

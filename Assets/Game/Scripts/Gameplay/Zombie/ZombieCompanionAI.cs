@@ -56,6 +56,14 @@ namespace Game.Gameplay.Zombie
         /// </summary>
         private Func<IReadOnlyList<HumanUnit>> m_getActiveHumans;
 
+        // ==================== 新生冲刺状态 ====================
+
+        /// <summary>冲刺剩余时间（秒），> 0 时处于冲刺状态</summary>
+        private float m_rushRemainingTime;
+
+        /// <summary>是否处于新生冲刺状态</summary>
+        public bool IsRushing => m_rushRemainingTime > 0f;
+
         // ==================== 生命周期 ====================
 
         /// <summary>
@@ -90,6 +98,22 @@ namespace Game.Gameplay.Zombie
             m_config = config;
             m_playerTransform = playerTransform;
             m_getActiveHumans = getActiveHumans;
+
+            // 重置冲刺状态（对象池复用时清理残留）
+            m_rushRemainingTime = 0f;
+        }
+
+        /// <summary>
+        /// 启动新生冲刺。由 InfectionSystem 在生成新 ZombieCompanion 后调用。
+        /// 冲刺期间移动速度乘以倍率，优先朝最近 Human 移动。
+        /// </summary>
+        public void StartNewbornRush()
+        {
+            if (m_config == null || !m_config.EnableNewbornRush)
+            {
+                return;
+            }
+            m_rushRemainingTime = m_config.NewbornRushDuration;
         }
 
         // ==================== 公开纯函数 ====================
@@ -184,6 +208,14 @@ namespace Game.Gameplay.Zombie
 
             Vector2 selfPos = m_unit.Position;
 
+            // 新生冲刺状态处理：优先朝最近 Human 高速移动
+            if (m_rushRemainingTime > 0f)
+            {
+                m_rushRemainingTime -= deltaTime;
+                UpdateRushBehavior(selfPos, deltaTime);
+                return;
+            }
+
             // 1. 在感知范围内寻找最近的可追击 Human
             HumanUnit target = TryFindTargetWithinPerception(selfPos);
 
@@ -253,6 +285,56 @@ namespace Game.Gameplay.Zombie
         }
 
         // ==================== 内部辅助 ====================
+
+        /// <summary>
+        /// 新生冲刺行为：以加速倍率朝最近 Human 移动。
+        /// 如果没有目标则朝玩家方向冲刺，都没有则冲刺提前结束。
+        /// </summary>
+        private void UpdateRushBehavior(Vector2 selfPos, float deltaTime)
+        {
+            // 寻找最近 Human（不限感知范围，冲刺期间全图搜索最近目标）
+            HumanUnit rushTarget = null;
+            if (m_getActiveHumans != null)
+            {
+                IReadOnlyList<HumanUnit> activeHumans = m_getActiveHumans();
+                if (activeHumans != null)
+                {
+                    rushTarget = FindNearestTarget(selfPos, activeHumans);
+                }
+            }
+
+            Vector2 moveDirection;
+            if (rushTarget != null)
+            {
+                m_unit.EnterChasing();
+                moveDirection = CalculateMoveDirection(selfPos, rushTarget.Position);
+            }
+            else if (m_playerTransform != null)
+            {
+                // 无目标时朝玩家方向冲刺
+                m_unit.EnterFollowing();
+                Vector2 playerPos = new Vector2(m_playerTransform.position.x, m_playerTransform.position.y);
+                moveDirection = CalculateMoveDirection(selfPos, playerPos);
+            }
+            else
+            {
+                moveDirection = Vector2.zero;
+            }
+
+            if (moveDirection.sqrMagnitude < Mathf.Epsilon)
+            {
+                return;
+            }
+
+            // 冲刺速度 = 基础速度 * 倍率
+            float rushSpeed = m_config.ZombieCompanionSpeed * m_config.NewbornRushSpeedMultiplier;
+            Vector2 displacement = moveDirection * (rushSpeed * deltaTime);
+            Vector3 currentPosition = transform.position;
+            transform.position = new Vector3(
+                currentPosition.x + displacement.x,
+                currentPosition.y + displacement.y,
+                currentPosition.z);
+        }
 
         /// <summary>
         /// 从当前活跃 Human 列表中找到距离 <paramref name="selfPos"/> 最近、且位于感知半径内、且未被感染的 Human。

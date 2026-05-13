@@ -34,6 +34,10 @@ namespace Game.UI
         [Tooltip("目标达成提示对象")]
         [SerializeField] private GameObject m_victoryIndicator;
 
+        [Header("末日狂潮 UI")]
+        [Tooltip("末日狂潮提示对象，进入 Final Frenzy 时显示")]
+        [SerializeField] private GameObject m_frenzyIndicator;
+
         // ==================== 运行时依赖 ====================
 
         /// <summary>TimerSystem 引用，用于订阅时间变化事件</summary>
@@ -60,8 +64,9 @@ namespace Game.UI
             m_timerSystem = timerSystem;
             m_sessionController = sessionController;
 
-            // 初始隐藏目标达成提示
+            // 初始隐藏目标达成提示和末日狂潮提示
             HideVictoryIndicator();
+            HideFrenzyIndicator();
         }
 
         private void OnEnable()
@@ -70,6 +75,7 @@ namespace Game.UI
             GameEvents.OnGoldChanged += UpdateGold;
             GameEvents.OnLevelUp += UpdateLevel;
             GameEvents.OnInfectionCountChanged += UpdateInfectionCount;
+            GameEvents.OnFinalFrenzyStarted += ShowFrenzyIndicator;
 
             if (m_timerSystem != null)
             {
@@ -101,6 +107,7 @@ namespace Game.UI
             GameEvents.OnGoldChanged -= UpdateGold;
             GameEvents.OnLevelUp -= UpdateLevel;
             GameEvents.OnInfectionCountChanged -= UpdateInfectionCount;
+            GameEvents.OnFinalFrenzyStarted -= ShowFrenzyIndicator;
 
             if (m_timerSystem != null)
             {
@@ -200,6 +207,63 @@ namespace Game.UI
             {
                 m_victoryIndicator.SetActive(false);
             }
+        }
+
+        /// <summary>
+        /// 显示末日狂潮提示。
+        /// 订阅 <see cref="GameEvents.OnFinalFrenzyStarted"/> 事件。
+        /// </summary>
+        public void ShowFrenzyIndicator()
+        {
+            EnsureFrenzyIndicatorBuilt();
+            if (m_frenzyIndicator != null)
+            {
+                m_frenzyIndicator.SetActive(true);
+            }
+        }
+
+        /// <summary>
+        /// 隐藏末日狂潮提示。
+        /// </summary>
+        public void HideFrenzyIndicator()
+        {
+            if (m_frenzyIndicator != null)
+            {
+                m_frenzyIndicator.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// 如果 m_frenzyIndicator 未在 Inspector 中赋值，则在运行时自动创建一个简单的文本提示。
+        /// </summary>
+        private void EnsureFrenzyIndicatorBuilt()
+        {
+            if (m_frenzyIndicator != null)
+            {
+                return;
+            }
+
+            // 在 HUDPanel 下创建一个居中偏上的 "FINAL FRENZY" 文本
+            GameObject go = new GameObject("FrenzyIndicator", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            go.transform.SetParent(transform, false);
+
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.85f);
+            rect.anchorMax = new Vector2(0.5f, 0.85f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(400f, 60f);
+
+            Text text = go.GetComponent<Text>();
+            text.text = "FINAL FRENZY";
+            text.fontSize = 32;
+            text.fontStyle = FontStyle.Bold;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = new Color(1f, 0.3f, 0.1f, 1f); // 醒目的橙红色
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+            m_frenzyIndicator = go;
+            go.SetActive(false); // 默认隐藏
         }
     }
 }

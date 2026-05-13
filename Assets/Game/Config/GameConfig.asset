@@ -38,3 +38,14 @@ MonoBehaviour:
   m_aScoreInfectedCount: 150
   m_sScoreInfectedCount: 250
   m_ssScoreInfectedCount: 350
+  m_enableInfectionBurst: 1
+  m_infectionBurstRadius: 1.2
+  m_infectionBurstMaxTargets: 3
+  m_enableNewbornRush: 1
+  m_newbornRushDuration: 0.8
+  m_newbornRushSpeedMultiplier: 2
+  m_enableFinalFrenzy: 1
+  m_finalFrenzyStartRemainingTime: 30
+  m_finalFrenzyClusterSpawnInterval: 1
+  m_finalFrenzyLargeClusterMin: 15
+  m_finalFrenzyLargeClusterMax: 20

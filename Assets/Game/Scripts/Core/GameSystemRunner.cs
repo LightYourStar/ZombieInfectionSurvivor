@@ -105,6 +105,9 @@ namespace Game.Core
         /// <summary>升级面板弹出时暂停游戏逻辑</summary>
         private bool m_isPaused;
 
+        /// <summary>末日狂潮是否已在本局触发过（每局只触发一次）</summary>
+        private bool m_finalFrenzyTriggered;
+
         // ==================== Unity 生命周期 ====================
 
         private void Awake()
@@ -336,6 +339,9 @@ namespace Game.Core
             {
                 m_timerSystem.UpdateTimer(deltaTime);
             }
+
+            // 7. 末日狂潮检测：剩余时间 <= 阈值时触发一次
+            CheckFinalFrenzy();
         }
 
         // ==================== 状态变化处理 ====================
@@ -399,6 +405,7 @@ namespace Game.Core
         {
             // 重置本局统计
             m_infectionCount = 0;
+            m_finalFrenzyTriggered = false;
 
             // 重置玩家属性（清除局内升级加成，保留基础值+局外加成）
             if (m_playerStats != null)
@@ -463,10 +470,11 @@ namespace Game.Core
                 m_resultPanel.HideResult();
             }
 
-            // 隐藏 HUD 上的目标达成提示（新一局开始时重置）
+            // 隐藏 HUD 上的目标达成提示和末日狂潮提示（新一局开始时重置）
             if (m_hudPanel != null)
             {
                 m_hudPanel.HideVictoryIndicator();
+                m_hudPanel.HideFrenzyIndicator();
             }
         }
 
@@ -665,6 +673,34 @@ namespace Game.Core
         public void ResetSystems()
         {
             StartNewMatch();
+        }
+
+        // ==================== 末日狂潮检测 ====================
+
+        /// <summary>
+        /// 检测是否应触发末日狂潮。每局只触发一次。
+        /// 当剩余时间 <= GameConfig.FinalFrenzyStartRemainingTime 时触发。
+        /// </summary>
+        private void CheckFinalFrenzy()
+        {
+            if (m_finalFrenzyTriggered)
+            {
+                return;
+            }
+            if (m_gameConfig == null || !m_gameConfig.EnableFinalFrenzy)
+            {
+                return;
+            }
+            if (m_timerSystem == null || !m_timerSystem.IsRunning)
+            {
+                return;
+            }
+
+            if (m_timerSystem.RemainingTime <= m_gameConfig.FinalFrenzyStartRemainingTime)
+            {
+                m_finalFrenzyTriggered = true;
+                GameEvents.RaiseFinalFrenzyStarted();
+            }
         }
 
         // ==================== 输入辅助 ====================

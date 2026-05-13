@@ -195,5 +195,80 @@ namespace Game.Config
 
         /// <summary>SS 级评分所需感染人数阈值。</summary>
         public int SSScoreInfectedCount => m_ssScoreInfectedCount;
+
+        // ==================== 感染爆发 (Chain Infection Burst) ====================
+
+        [Header("感染爆发")]
+        [Tooltip("是否启用感染爆发机制")]
+        [SerializeField] private bool m_enableInfectionBurst = true;
+
+        [Tooltip("感染爆发的二次检测半径")]
+        [SerializeField] private float m_infectionBurstRadius = 1.2f;
+
+        [Tooltip("单次爆发最多额外感染的 Human 数量")]
+        [SerializeField] private int m_infectionBurstMaxTargets = 3;
+
+        /// <summary>是否启用感染爆发机制。</summary>
+        public bool EnableInfectionBurst => m_enableInfectionBurst;
+
+        /// <summary>感染爆发的二次检测半径。</summary>
+        public float InfectionBurstRadius => m_infectionBurstRadius;
+
+        /// <summary>单次爆发最多额外感染的 Human 数量。</summary>
+        public int InfectionBurstMaxTargets => m_infectionBurstMaxTargets;
+
+        // ==================== 新生僵尸冲刺 (Newborn Zombie Rush) ====================
+
+        [Header("新生僵尸冲刺")]
+        [Tooltip("是否启用新生僵尸冲刺")]
+        [SerializeField] private bool m_enableNewbornRush = true;
+
+        [Tooltip("新生僵尸冲刺持续时间（秒）")]
+        [SerializeField] private float m_newbornRushDuration = 0.8f;
+
+        [Tooltip("新生僵尸冲刺速度倍率")]
+        [SerializeField] private float m_newbornRushSpeedMultiplier = 2.0f;
+
+        /// <summary>是否启用新生僵尸冲刺。</summary>
+        public bool EnableNewbornRush => m_enableNewbornRush;
+
+        /// <summary>新生僵尸冲刺持续时间（秒）。</summary>
+        public float NewbornRushDuration => m_newbornRushDuration;
+
+        /// <summary>新生僵尸冲刺速度倍率。</summary>
+        public float NewbornRushSpeedMultiplier => m_newbornRushSpeedMultiplier;
+
+        // ==================== 末日狂潮 (Final Frenzy) ====================
+
+        [Header("末日狂潮")]
+        [Tooltip("是否启用末日狂潮")]
+        [SerializeField] private bool m_enableFinalFrenzy = true;
+
+        [Tooltip("末日狂潮触发时的剩余时间阈值（秒）")]
+        [SerializeField] private float m_finalFrenzyStartRemainingTime = 30f;
+
+        [Tooltip("末日狂潮期间的簇刷新间隔（秒）")]
+        [SerializeField] private float m_finalFrenzyClusterSpawnInterval = 1f;
+
+        [Tooltip("末日狂潮大簇最少人数")]
+        [SerializeField] private int m_finalFrenzyLargeClusterMin = 15;
+
+        [Tooltip("末日狂潮大簇最多人数")]
+        [SerializeField] private int m_finalFrenzyLargeClusterMax = 20;
+
+        /// <summary>是否启用末日狂潮。</summary>
+        public bool EnableFinalFrenzy => m_enableFinalFrenzy;
+
+        /// <summary>末日狂潮触发时的剩余时间阈值（秒）。</summary>
+        public float FinalFrenzyStartRemainingTime => m_finalFrenzyStartRemainingTime;
+
+        /// <summary>末日狂潮期间的簇刷新间隔（秒）。</summary>
+        public float FinalFrenzyClusterSpawnInterval => m_finalFrenzyClusterSpawnInterval;
+
+        /// <summary>末日狂潮大簇最少人数。</summary>
+        public int FinalFrenzyLargeClusterMin => m_finalFrenzyLargeClusterMin;
+
+        /// <summary>末日狂潮大簇最多人数。</summary>
+        public int FinalFrenzyLargeClusterMax => m_finalFrenzyLargeClusterMax;
     }
 }

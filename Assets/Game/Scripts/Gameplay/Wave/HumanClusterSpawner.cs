@@ -89,6 +89,9 @@ namespace Game.Gameplay.Wave
         /// <summary>由上层注入的僵尸位置获取委托，转发给 HumanAI</summary>
         private Func<IReadOnlyList<Vector2>> m_getZombiePositions;
 
+        /// <summary>是否已进入末日狂潮模式</summary>
+        private bool m_isFinalFrenzy;
+
         // ==================== 公开属性 ====================
 
         /// <summary>小簇最少人数（供测试访问）</summary>
@@ -131,6 +134,10 @@ namespace Game.Gameplay.Wave
         public void Initialize(Func<IReadOnlyList<Vector2>> getZombiePositions)
         {
             m_getZombiePositions = getZombiePositions;
+
+            // 先取消再订阅，防止重复初始化导致重复订阅
+            Game.Core.GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
+            Game.Core.GameEvents.OnFinalFrenzyStarted += HandleFinalFrenzyStarted;
         }
 
         // ==================== 公开 API ====================
@@ -168,6 +175,7 @@ namespace Game.Gameplay.Wave
         /// 按配置间隔持续补充新的簇。
         /// 每帧累积 deltaTime，当累积时间达到 ClusterSpawnInterval 时尝试生成一个新簇。
         /// 随机选择 SmallCluster（3-5 人）或 MediumCluster（8-12 人）。
+        /// 末日狂潮期间使用更短间隔和更大簇。
         /// 新簇中心距玩家 >= 8 单位，与已有簇中心距离 >= 5。
         /// 当场上人类总数 >= HumanMaxCount 时停止生成。
         /// </summary>
@@ -181,11 +189,16 @@ namespace Game.Gameplay.Wave
 
             m_spawnTimer += deltaTime;
 
+            // 末日狂潮期间使用更短的刷新间隔
+            float currentInterval = m_isFinalFrenzy && m_config.EnableFinalFrenzy
+                ? m_config.FinalFrenzyClusterSpawnInterval
+                : m_clusterSpawnInterval;
+
             // 当累积时间达到间隔阈值时尝试生成
-            while (m_spawnTimer >= m_clusterSpawnInterval)
+            while (m_spawnTimer >= currentInterval)
             {
                 // 减去间隔而非归零，保留余数以维持稳定的生成节奏
-                m_spawnTimer -= m_clusterSpawnInterval;
+                m_spawnTimer -= currentInterval;
 
                 // 检查人类数量上限：达到上限时停止生成
                 if (m_spawnSystem.ActiveHumanCount >= m_config.HumanMaxCount)
@@ -193,17 +206,33 @@ namespace Game.Gameplay.Wave
                     break;
                 }
 
-                // 随机选择簇类型：50% SmallCluster，50% MediumCluster
+                // 根据是否处于末日狂潮选择簇大小
                 int clusterSize;
-                if (UnityEngine.Random.value < 0.5f)
+                if (m_isFinalFrenzy && m_config.EnableFinalFrenzy)
                 {
-                    // SmallCluster: [3, 5]
-                    clusterSize = UnityEngine.Random.Range(m_smallClusterMin, m_smallClusterMax + 1);
+                    // 末日狂潮：70% 大簇，30% 中簇
+                    if (UnityEngine.Random.value < 0.7f)
+                    {
+                        clusterSize = UnityEngine.Random.Range(
+                            m_config.FinalFrenzyLargeClusterMin,
+                            m_config.FinalFrenzyLargeClusterMax + 1);
+                    }
+                    else
+                    {
+                        clusterSize = UnityEngine.Random.Range(m_mediumClusterMin, m_mediumClusterMax + 1);
+                    }
                 }
                 else
                 {
-                    // MediumCluster: [8, 12]
-                    clusterSize = UnityEngine.Random.Range(m_mediumClusterMin, m_mediumClusterMax + 1);
+                    // 正常模式：50% SmallCluster，50% MediumCluster
+                    if (UnityEngine.Random.value < 0.5f)
+                    {
+                        clusterSize = UnityEngine.Random.Range(m_smallClusterMin, m_smallClusterMax + 1);
+                    }
+                    else
+                    {
+                        clusterSize = UnityEngine.Random.Range(m_mediumClusterMin, m_mediumClusterMax + 1);
+                    }
                 }
 
                 // 选择满足约束的簇中心位置：距玩家 >= 8，与已有簇中心距离 >= 5
@@ -221,6 +250,22 @@ namespace Game.Gameplay.Wave
         {
             m_clusterCenters.Clear();
             m_spawnTimer = 0f;
+            m_isFinalFrenzy = false;
+        }
+
+        /// <summary>
+        /// 末日狂潮事件处理：切换到狂潮模式，重置计时器以立即开始高频刷新。
+        /// </summary>
+        private void HandleFinalFrenzyStarted()
+        {
+            m_isFinalFrenzy = true;
+            // 重置计时器，让狂潮立即开始生成
+            m_spawnTimer = m_config != null ? m_config.FinalFrenzyClusterSpawnInterval : 1f;
+        }
+
+        private void OnDestroy()
+        {
+            Game.Core.GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
         }
 
         // ==================== 内部方法 ====================

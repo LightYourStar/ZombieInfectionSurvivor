@@ -133,15 +133,7 @@ namespace Game.Core
             m_currentState = SessionState.Playing;
             GameEvents.RaiseSessionStateChanged(m_currentState);
 
-            // 启动倒计时
-            if (m_timerSystem != null)
-            {
-                m_timerSystem.StartTimer();
-            }
-            else
-            {
-                Debug.LogWarning("[GameSessionController] TimerSystem 未赋值，跳过倒计时逻辑");
-            }
+            // 注意：TimerSystem 的启动由 GameSystemRunner 统一管理，此处不重复调用
 
             // 通知感染计数初始值
             int target = m_config != null ? m_config.TargetInfectedCount : 80;

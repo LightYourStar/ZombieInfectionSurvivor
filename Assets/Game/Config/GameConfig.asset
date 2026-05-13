@@ -49,3 +49,5 @@ MonoBehaviour:
   m_finalFrenzyClusterSpawnInterval: 1
   m_finalFrenzyLargeClusterMin: 15
   m_finalFrenzyLargeClusterMax: 20
+  m_enableFinalFrenzyHumanCapOverride: 1
+  m_finalFrenzyHumanMaxCount: 100

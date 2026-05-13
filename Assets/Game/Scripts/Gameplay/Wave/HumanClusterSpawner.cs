@@ -201,7 +201,8 @@ namespace Game.Gameplay.Wave
                 m_spawnTimer -= currentInterval;
 
                 // 检查人类数量上限：达到上限时停止生成
-                if (m_spawnSystem.ActiveHumanCount >= m_config.HumanMaxCount)
+                int currentHumanCap = GetCurrentHumanMaxCount();
+                if (m_spawnSystem.ActiveHumanCount >= currentHumanCap)
                 {
                     break;
                 }
@@ -254,13 +255,23 @@ namespace Game.Gameplay.Wave
         }
 
         /// <summary>
-        /// 末日狂潮事件处理：切换到狂潮模式，重置计时器以立即开始高频刷新。
+        /// 末日狂潮事件处理：切换到狂潮模式，立即刷一波大簇，并重置计时器以开始高频刷新。
         /// </summary>
         private void HandleFinalFrenzyStarted()
         {
             m_isFinalFrenzy = true;
-            // 重置计时器，让狂潮立即开始生成
+            // 重置计时器，让狂潮立即开始高频生成
             m_spawnTimer = m_config != null ? m_config.FinalFrenzyClusterSpawnInterval : 1f;
+
+            // 立即刷一波大簇，不等下一次自然间隔
+            if (ValidateDependencies() && m_playerTransform != null && m_config != null)
+            {
+                int burstSize = UnityEngine.Random.Range(
+                    m_config.FinalFrenzyLargeClusterMin,
+                    m_config.FinalFrenzyLargeClusterMax + 1);
+                Vector2 center = PickClusterCenter(m_periodicSpawnMinDistFromPlayer, m_clusterMinSeparation);
+                SpawnCluster(center, burstSize);
+            }
         }
 
         private void OnDestroy()
@@ -288,7 +299,7 @@ namespace Game.Gameplay.Wave
             {
                 // 检查是否已达到人类上限
                 if (m_config != null && m_spawnSystem != null &&
-                    m_spawnSystem.ActiveHumanCount >= m_config.HumanMaxCount)
+                    m_spawnSystem.ActiveHumanCount >= GetCurrentHumanMaxCount())
                 {
                     break;
                 }
@@ -491,6 +502,25 @@ namespace Game.Gameplay.Wave
             {
                 m_spawnSystem.RegisterHuman(human);
             }
+        }
+
+        /// <summary>
+        /// 获取当前生效的人类数量上限。
+        /// 末日狂潮期间且启用了上限覆盖时使用 FinalFrenzyHumanMaxCount，否则使用 HumanMaxCount。
+        /// </summary>
+        private int GetCurrentHumanMaxCount()
+        {
+            if (m_config == null)
+            {
+                return 50;
+            }
+
+            if (m_isFinalFrenzy && m_config.EnableFinalFrenzyHumanCapOverride)
+            {
+                return m_config.FinalFrenzyHumanMaxCount;
+            }
+
+            return m_config.HumanMaxCount;
         }
 
         /// <summary>

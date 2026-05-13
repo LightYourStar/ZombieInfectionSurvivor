@@ -1,3 +1,4 @@
+using System.Collections;
 using Game.Core;
 using UnityEngine;
 using UnityEngine.UI;
@@ -45,6 +46,12 @@ namespace Game.UI
 
         /// <summary>GameSessionController 引用，用于订阅单局事件</summary>
         private GameSessionController m_sessionController;
+
+        /// <summary>缓存狂潮动画协程引用，用于在 HideFrenzyIndicator 时停止</summary>
+        private Coroutine m_frenzyCoroutine;
+
+        /// <summary>FrenzyIndicator 的初始锚点位置（动画结束后用于下一局重置）</summary>
+        private Vector2 m_frenzyIndicatorInitialPos = Vector2.zero;
 
         // ==================== 初始化 ====================
 
@@ -210,27 +217,116 @@ namespace Game.UI
         }
 
         /// <summary>
-        /// 显示末日狂潮提示。
+        /// 显示末日狂潮提示，带放大淡入动画。
         /// 订阅 <see cref="GameEvents.OnFinalFrenzyStarted"/> 事件。
         /// </summary>
         public void ShowFrenzyIndicator()
         {
             EnsureFrenzyIndicatorBuilt();
-            if (m_frenzyIndicator != null)
+            if (m_frenzyIndicator == null)
             {
-                m_frenzyIndicator.SetActive(true);
+                return;
             }
+
+            // 停止上一次可能还在播放的动画
+            if (m_frenzyCoroutine != null)
+            {
+                StopCoroutine(m_frenzyCoroutine);
+                m_frenzyCoroutine = null;
+            }
+
+            // 重置到初始状态，避免上一局动画残留
+            RectTransform rect = m_frenzyIndicator.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                rect.anchoredPosition = m_frenzyIndicatorInitialPos;
+                rect.localScale = Vector3.one;
+            }
+
+            CanvasGroup cg = m_frenzyIndicator.GetComponent<CanvasGroup>();
+            if (cg == null)
+            {
+                cg = m_frenzyIndicator.AddComponent<CanvasGroup>();
+            }
+            cg.alpha = 0f;
+
+            m_frenzyIndicator.SetActive(true);
+            m_frenzyCoroutine = StartCoroutine(FrenzyIndicatorAnimation());
         }
 
         /// <summary>
-        /// 隐藏末日狂潮提示。
+        /// 隐藏末日狂潮提示，并停止正在播放的动画协程。
         /// </summary>
         public void HideFrenzyIndicator()
         {
+            if (m_frenzyCoroutine != null)
+            {
+                StopCoroutine(m_frenzyCoroutine);
+                m_frenzyCoroutine = null;
+            }
+
             if (m_frenzyIndicator != null)
             {
                 m_frenzyIndicator.SetActive(false);
             }
+        }
+
+        /// <summary>
+        /// 末日狂潮提示动画：放大淡入 → 保持 → 缩小到角落持续显示。
+        /// </summary>
+        private IEnumerator FrenzyIndicatorAnimation()
+        {
+            if (m_frenzyIndicator == null)
+            {
+                yield break;
+            }
+
+            RectTransform rect = m_frenzyIndicator.GetComponent<RectTransform>();
+            CanvasGroup cg = m_frenzyIndicator.GetComponent<CanvasGroup>();
+            if (cg == null)
+            {
+                cg = m_frenzyIndicator.AddComponent<CanvasGroup>();
+            }
+
+            // 阶段 1：放大淡入（0.3 秒）
+            float fadeInDuration = 0.3f;
+            float elapsed = 0f;
+            while (elapsed < fadeInDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / fadeInDuration);
+                float scale = Mathf.Lerp(2.5f, 1f, t);
+                rect.localScale = new Vector3(scale, scale, 1f);
+                cg.alpha = t;
+                yield return null;
+            }
+            rect.localScale = Vector3.one;
+            cg.alpha = 1f;
+
+            // 阶段 2：保持 1.5 秒
+            yield return new WaitForSeconds(1.5f);
+
+            // 阶段 3：缩小并移到右上角（0.4 秒）
+            float shrinkDuration = 0.4f;
+            elapsed = 0f;
+            Vector2 startPos = rect.anchoredPosition;
+            Vector2 endPos = new Vector2(160f, 0f);
+            while (elapsed < shrinkDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / shrinkDuration);
+                float scale = Mathf.Lerp(1f, 0.6f, t);
+                rect.localScale = new Vector3(scale, scale, 1f);
+                rect.anchoredPosition = Vector2.Lerp(startPos, endPos, t);
+                cg.alpha = Mathf.Lerp(1f, 0.7f, t);
+                yield return null;
+            }
+            rect.localScale = new Vector3(0.6f, 0.6f, 1f);
+            rect.anchoredPosition = endPos;
+            cg.alpha = 0.7f;
+
+            // 动画完成，清空协程引用
+            m_frenzyCoroutine = null;
         }
 
         /// <summary>
@@ -259,11 +355,16 @@ namespace Game.UI
             text.fontSize = 32;
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.MiddleCenter;
-            text.color = new Color(1f, 0.3f, 0.1f, 1f); // 醒目的橙红色
+            text.color = new Color(1f, 0.3f, 0.1f, 1f);
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
+            // 添加 CanvasGroup 用于动画控制
+            CanvasGroup cg = go.AddComponent<CanvasGroup>();
+            cg.alpha = 0f;
+
             m_frenzyIndicator = go;
-            go.SetActive(false); // 默认隐藏
+            m_frenzyIndicatorInitialPos = Vector2.zero; // 记录初始位置
+            go.SetActive(false);
         }
     }
 }

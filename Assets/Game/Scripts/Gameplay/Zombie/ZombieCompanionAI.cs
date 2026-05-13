@@ -64,6 +64,15 @@ namespace Game.Gameplay.Zombie
         /// <summary>是否处于新生冲刺状态</summary>
         public bool IsRushing => m_rushRemainingTime > 0f;
 
+        /// <summary>冲刺视觉：缓存原始颜色用于恢复</summary>
+        private Color m_originalColor = Color.white;
+
+        /// <summary>冲刺视觉：是否已应用冲刺视觉效果</summary>
+        private bool m_rushVisualActive;
+
+        /// <summary>冲刺高亮颜色</summary>
+        private static readonly Color s_rushColor = new Color(1f, 0.4f, 0.2f, 1f);
+
         // ==================== 生命周期 ====================
 
         /// <summary>
@@ -114,6 +123,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
             m_rushRemainingTime = m_config.NewbornRushDuration;
+            ApplyRushVisual();
         }
 
         // ==================== 公开纯函数 ====================
@@ -212,8 +222,16 @@ namespace Game.Gameplay.Zombie
             if (m_rushRemainingTime > 0f)
             {
                 m_rushRemainingTime -= deltaTime;
-                UpdateRushBehavior(selfPos, deltaTime);
-                return;
+                if (m_rushRemainingTime <= 0f)
+                {
+                    // 冲刺结束，恢复视觉
+                    RemoveRushVisual();
+                }
+                else
+                {
+                    UpdateRushBehavior(selfPos, deltaTime);
+                    return;
+                }
             }
 
             // 1. 在感知范围内寻找最近的可追击 Human
@@ -369,6 +387,81 @@ namespace Game.Gameplay.Zombie
             }
 
             return nearest;
+        }
+
+        // ==================== 冲刺视觉反馈 ====================
+
+        /// <summary>MaterialPropertyBlock 复用实例，避免每帧分配</summary>
+        private MaterialPropertyBlock m_propBlock;
+
+        private static readonly int s_colorPropertyId = Shader.PropertyToID("_Color");
+
+        /// <summary>
+        /// 应用冲刺视觉效果：使用 MaterialPropertyBlock 修改颜色，不污染共享材质。
+        /// </summary>
+        private void ApplyRushVisual()
+        {
+            if (m_rushVisualActive)
+            {
+                return;
+            }
+
+            // SpriteRenderer：直接修改 color 属性（SpriteRenderer 不共享材质颜色）
+            SpriteRenderer sr = GetComponent<SpriteRenderer>();
+            if (sr != null)
+            {
+                m_originalColor = sr.color;
+                sr.color = s_rushColor;
+                m_rushVisualActive = true;
+                return;
+            }
+
+            // MeshRenderer：使用 MaterialPropertyBlock，不创建材质实例，不污染共享材质
+            MeshRenderer mr = GetComponent<MeshRenderer>();
+            if (mr != null)
+            {
+                if (m_propBlock == null)
+                {
+                    m_propBlock = new MaterialPropertyBlock();
+                }
+                mr.GetPropertyBlock(m_propBlock);
+                // 读取当前颜色作为原始颜色（PropertyBlock 为空时取材质颜色）
+                m_originalColor = mr.sharedMaterial != null ? mr.sharedMaterial.color : Color.white;
+                m_propBlock.SetColor(s_colorPropertyId, s_rushColor);
+                mr.SetPropertyBlock(m_propBlock);
+                m_rushVisualActive = true;
+            }
+        }
+
+        /// <summary>
+        /// 移除冲刺视觉效果，恢复原始颜色。
+        /// </summary>
+        private void RemoveRushVisual()
+        {
+            if (!m_rushVisualActive)
+            {
+                return;
+            }
+
+            SpriteRenderer sr = GetComponent<SpriteRenderer>();
+            if (sr != null)
+            {
+                sr.color = m_originalColor;
+                m_rushVisualActive = false;
+                return;
+            }
+
+            MeshRenderer mr = GetComponent<MeshRenderer>();
+            if (mr != null)
+            {
+                if (m_propBlock == null)
+                {
+                    m_propBlock = new MaterialPropertyBlock();
+                }
+                m_propBlock.SetColor(s_colorPropertyId, m_originalColor);
+                mr.SetPropertyBlock(m_propBlock);
+                m_rushVisualActive = false;
+            }
         }
     }
 }

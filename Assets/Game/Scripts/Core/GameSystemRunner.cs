@@ -256,7 +256,10 @@ namespace Game.Core
             // 11. 订阅游戏事件
             SubscribeEvents();
 
-            // 12. 确保状态机处于 Start 状态
+            // 12. 确保感染 VFX 池已创建并激活（自动订阅 OnInfectionSuccess）
+            EnsureInfectionVFXPool();
+
+            // 13. 确保状态机处于 Start 状态
             if (m_stateManager != null)
             {
                 m_stateManager.ChangeState(GameState.Start);
@@ -721,6 +724,29 @@ namespace Game.Core
             if (keyDir.sqrMagnitude > 1f) keyDir.Normalize();
 
             return (keyDir.sqrMagnitude > joystickDir.sqrMagnitude) ? keyDir : joystickDir;
+        }
+
+        // ==================== 感染 VFX 池 ====================
+
+        /// <summary>
+        /// 确保场景中存在 InfectionVFXPool 组件。
+        /// 若已存在则不重复创建；若不存在则在 GameSystemRunner 的子节点上自动创建。
+        /// 调用后 InfectionVFXPool 会通过 OnEnable 自动订阅 GameEvents.OnInfectionSuccess。
+        /// </summary>
+        private void EnsureInfectionVFXPool()
+        {
+            // 先检查场景中是否已有（Inspector 手动挂载的情况）
+            InfectionVFXPool existing = FindObjectOfType<InfectionVFXPool>();
+            if (existing != null)
+            {
+                return;
+            }
+
+            // 自动创建
+            GameObject vfxGo = new GameObject("InfectionVFXPool");
+            vfxGo.transform.SetParent(transform, false);
+            vfxGo.AddComponent<InfectionVFXPool>();
+            // AddComponent 会触发 Awake，OnEnable 会在 GameObject 激活时自动订阅事件
         }
     }
 }

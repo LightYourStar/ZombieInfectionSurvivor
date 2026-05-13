@@ -270,5 +270,17 @@ namespace Game.Config
 
         /// <summary>末日狂潮大簇最多人数。</summary>
         public int FinalFrenzyLargeClusterMax => m_finalFrenzyLargeClusterMax;
+
+        [Tooltip("末日狂潮期间是否临时提高人类上限")]
+        [SerializeField] private bool m_enableFinalFrenzyHumanCapOverride = true;
+
+        [Tooltip("末日狂潮期间的人类数量上限")]
+        [SerializeField] private int m_finalFrenzyHumanMaxCount = 100;
+
+        /// <summary>末日狂潮期间是否临时提高人类上限。</summary>
+        public bool EnableFinalFrenzyHumanCapOverride => m_enableFinalFrenzyHumanCapOverride;
+
+        /// <summary>末日狂潮期间的人类数量上限。</summary>
+        public int FinalFrenzyHumanMaxCount => m_finalFrenzyHumanMaxCount;
     }
 }

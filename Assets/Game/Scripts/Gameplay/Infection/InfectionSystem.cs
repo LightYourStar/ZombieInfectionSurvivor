@@ -158,6 +158,11 @@ namespace Game.Gameplay.Infection
             {
                 return false;
             }
+            // 已被标记为感染的 Human 不重复处理（防止同一波中重复 TryInfect 同一目标）
+            if (human.IsInfected)
+            {
+                return false;
+            }
             if (m_playerStats == null)
             {
                 Debug.LogError("[InfectionSystem] TryInfect 时 PlayerStats 尚未注入，感染失败");

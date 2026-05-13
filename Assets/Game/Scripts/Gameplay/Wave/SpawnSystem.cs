@@ -243,8 +243,15 @@ namespace Game.Gameplay.Wave
             bool removed = m_activeHumans.Remove(human);
             if (!removed)
             {
-                // 对未在活跃列表中的 Human 仍然尝试归还池，保持池计数健康
-                Debug.LogWarning("[SpawnSystem] ReturnHuman 收到不在活跃列表中的 Human，已直接归还池");
+                // 边界情况：Human 可能已被其他路径移除（如 Reset 期间、重复感染等），
+                // 仍然归还池保持计数健康，但不再高频输出 warning 避免 Editor 卡顿。
+#if UNITY_EDITOR
+                // Editor 下限制输出频率：每 60 帧最多输出一次
+                if (Time.frameCount % 60 == 0)
+                {
+                    Debug.LogWarning("[SpawnSystem] ReturnHuman 收到不在活跃列表中的 Human（低频提示）");
+                }
+#endif
             }
 
             if (m_poolManager != null)

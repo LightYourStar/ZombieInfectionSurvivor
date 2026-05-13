@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Game.Config;
 using Game.Gameplay.Enemy;
@@ -79,6 +80,9 @@ namespace Game.Gameplay.Wave
         [SerializeField, Min(1)] private int m_maxPlacementAttempts = 30;
 
         // ==================== 运行时状态 ====================
+
+        /// <summary>簇中心历史记录最大保留数量，超过后移除最旧的，避免后期选点越来越重</summary>
+        private const int MaxClusterCenterHistory = 16;
 
         /// <summary>自上次簇刷新以来累计的时间（秒）</summary>
         private float m_spawnTimer;
@@ -255,7 +259,7 @@ namespace Game.Gameplay.Wave
         }
 
         /// <summary>
-        /// 末日狂潮事件处理：切换到狂潮模式，立即刷一波大簇，并重置计时器以开始高频刷新。
+        /// 末日狂潮事件处理：切换到狂潮模式，分批刷出首波大簇（避免同帧尖峰），并重置计时器。
         /// </summary>
         private void HandleFinalFrenzyStarted()
         {
@@ -263,14 +267,46 @@ namespace Game.Gameplay.Wave
             // 重置计时器，让狂潮立即开始高频生成
             m_spawnTimer = m_config != null ? m_config.FinalFrenzyClusterSpawnInterval : 1f;
 
-            // 立即刷一波大簇，不等下一次自然间隔
+            // 分批刷出首波大簇，而不是同一帧全部创建
             if (ValidateDependencies() && m_playerTransform != null && m_config != null)
             {
                 int burstSize = UnityEngine.Random.Range(
                     m_config.FinalFrenzyLargeClusterMin,
                     m_config.FinalFrenzyLargeClusterMax + 1);
                 Vector2 center = PickClusterCenter(m_periodicSpawnMinDistFromPlayer, m_clusterMinSeparation);
-                SpawnCluster(center, burstSize);
+                StartCoroutine(StaggeredSpawnCluster(center, burstSize));
+            }
+        }
+
+        /// <summary>
+        /// 分批生成簇内人类，将一个大簇拆成 3~4 批在 0.25 秒内刷完，避免同帧尖峰。
+        /// </summary>
+        /// <param name="center">簇中心位置</param>
+        /// <param name="totalCount">总人数</param>
+        private IEnumerator StaggeredSpawnCluster(Vector2 center, int totalCount)
+        {
+            const int batchCount = 4;
+            const float totalDuration = 0.25f;
+            float batchInterval = totalDuration / batchCount;
+
+            int spawned = 0;
+            for (int batch = 0; batch < batchCount; batch++)
+            {
+                // 计算本批数量：均匀分配，最后一批补余数
+                int batchSize = (totalCount - spawned) / (batchCount - batch);
+                if (batchSize <= 0)
+                {
+                    break;
+                }
+
+                // 使用现有 SpawnCluster 生成本批
+                SpawnCluster(center, batchSize);
+                spawned += batchSize;
+
+                if (batch < batchCount - 1)
+                {
+                    yield return new WaitForSeconds(batchInterval);
+                }
             }
         }
 
@@ -333,8 +369,13 @@ namespace Game.Gameplay.Wave
                 RegisterHumanToSpawnSystem(human);
             }
 
-            // 记录簇中心位置，用于后续簇间距约束检查
+            // 记录簇中心位置，用于后续簇间距约束检查。
+            // 只保留最近 MaxClusterCenterHistory 个，避免后期选点越来越重。
             m_clusterCenters.Add(center);
+            if (m_clusterCenters.Count > MaxClusterCenterHistory)
+            {
+                m_clusterCenters.RemoveAt(0);
+            }
         }
 
         /// <summary>

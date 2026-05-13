@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 using Game.Config;
+using Game.Gameplay.Feedback;
 using Game.Gameplay.Infection;
 using Game.Gameplay.Player;
 using Game.Gameplay.Skill;
@@ -259,6 +261,7 @@ namespace Game.Core
 
             // 12. 确保感染 VFX 池已创建并激活（自动订阅 OnInfectionSuccess）
             EnsureInfectionVFXPool();
+            InitializeDebugTools();
 
             // 13. 确保状态机处于 Start 状态
             if (m_stateManager != null)
@@ -733,6 +736,74 @@ namespace Game.Core
             if (keyDir.sqrMagnitude > 1f) keyDir.Normalize();
 
             return (keyDir.sqrMagnitude > joystickDir.sqrMagnitude) ? keyDir : joystickDir;
+        }
+
+        // ==================== 开发环境调试工具 ====================
+
+        [System.Diagnostics.Conditional("UNITY_EDITOR"), System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+        private void InitializeDebugTools()
+        {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            GameObject debugRoot = GameObject.Find("DebugRuntimeTools");
+            if (debugRoot == null)
+            {
+                debugRoot = new GameObject("DebugRuntimeTools");
+                debugRoot.transform.SetParent(transform, false);
+            }
+
+            InfectionComboTracker comboTracker = debugRoot.GetComponentInChildren<InfectionComboTracker>(true);
+            if (comboTracker == null)
+            {
+                GameObject trackerObject = new GameObject("InfectionComboTracker");
+                trackerObject.transform.SetParent(debugRoot.transform, false);
+                comboTracker = trackerObject.AddComponent<InfectionComboTracker>();
+            }
+
+            DebugStatsPanel debugStatsPanel = debugRoot.GetComponentInChildren<DebugStatsPanel>(true);
+            if (debugStatsPanel == null)
+            {
+                GameObject panelObject = new GameObject("DebugStatsPanel");
+                panelObject.transform.SetParent(debugRoot.transform, false);
+                debugStatsPanel = panelObject.AddComponent<DebugStatsPanel>();
+            }
+
+            Canvas canvas = FindObjectOfType<Canvas>();
+            if (canvas == null)
+            {
+                GameObject canvasObject = new GameObject("DebugCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+                canvas = canvasObject.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+                CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+            }
+
+            InfectionFeedbackDisplay feedbackDisplay = canvas.GetComponentInChildren<InfectionFeedbackDisplay>(true);
+            if (feedbackDisplay == null)
+            {
+                GameObject feedbackObject = new GameObject("InfectionFeedbackDisplay", typeof(RectTransform));
+                feedbackObject.transform.SetParent(canvas.transform, false);
+                feedbackDisplay = feedbackObject.AddComponent<InfectionFeedbackDisplay>();
+            }
+
+            Camera targetCamera = Camera.main;
+            if (targetCamera == null)
+            {
+                targetCamera = FindObjectOfType<Camera>();
+            }
+
+            debugStatsPanel.Initialize(
+                m_timerSystem,
+                m_infectionSystem,
+                m_sessionController,
+                comboTracker,
+                m_upgradeSystem,
+                m_playerStats,
+                m_gameConfig);
+
+            feedbackDisplay.Initialize(comboTracker, targetCamera);
+#endif
         }
 
         // ==================== 感染 VFX 池 ====================

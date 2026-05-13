@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Game.Config;
 using Game.Core;
@@ -89,6 +90,8 @@ namespace Game.Gameplay.Infection
         /// 供调试、结算统计等外部系统查询使用；调用方不得修改返回集合。
         /// </summary>
         public IReadOnlyList<ZombieCompanionUnit> ActiveZombies => m_activeZombies;
+
+        public event Action<int> OnInfectionBurstResolved;
 
         // ==================== 初始化 ====================
 
@@ -476,15 +479,29 @@ namespace Game.Gameplay.Infection
             }
 
             // 标记爆发进行中，防止递归
+            int actualInfectedCount = 0;
             m_isBurstInProgress = true;
 
-            for (int i = 0; i < m_burstBuffer.Count; i++)
+            try
             {
-                TryInfect(m_burstBuffer[i]);
+                for (int i = 0; i < m_burstBuffer.Count; i++)
+                {
+                    if (TryInfect(m_burstBuffer[i]))
+                    {
+                        actualInfectedCount++;
+                    }
+                }
+            }
+            finally
+            {
+                m_isBurstInProgress = false;
+                m_burstBuffer.Clear();
             }
 
-            m_isBurstInProgress = false;
-            m_burstBuffer.Clear();
+            if (actualInfectedCount > 0)
+            {
+                OnInfectionBurstResolved?.Invoke(actualInfectedCount);
+            }
         }
 
         /// <summary>

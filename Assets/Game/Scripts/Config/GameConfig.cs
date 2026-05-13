@@ -62,13 +62,13 @@ namespace Game.Config
 
         [Header("僵尸同伴属性")]
         [Tooltip("僵尸同伴移动速度（单位/秒）")]
-        [SerializeField] private float m_zombieCompanionSpeed = 4f;
+        [SerializeField] private float m_zombieCompanionSpeed = 3.2f;
 
         [Tooltip("僵尸同伴感知范围，用于寻找可追击的人类")]
-        [SerializeField] private float m_zombieCompanionPerceptionRadius = 5f;
+        [SerializeField] private float m_zombieCompanionPerceptionRadius = 3.75f;
 
         [Tooltip("僵尸同伴数量上限（可被局内升级提升）")]
-        [SerializeField] private int m_zombieCompanionMaxCount = 30;
+        [SerializeField] private int m_zombieCompanionMaxCount = 60;
 
         /// <summary>僵尸同伴移动速度。</summary>
         public float ZombieCompanionSpeed => m_zombieCompanionSpeed;
@@ -203,10 +203,10 @@ namespace Game.Config
         [SerializeField] private bool m_enableInfectionBurst = true;
 
         [Tooltip("感染爆发的二次检测半径")]
-        [SerializeField] private float m_infectionBurstRadius = 1.2f;
+        [SerializeField] private float m_infectionBurstRadius = 0.7f;
 
         [Tooltip("单次爆发最多额外感染的 Human 数量")]
-        [SerializeField] private int m_infectionBurstMaxTargets = 3;
+        [SerializeField] private int m_infectionBurstMaxTargets = 1;
 
         /// <summary>是否启用感染爆发机制。</summary>
         public bool EnableInfectionBurst => m_enableInfectionBurst;
@@ -224,10 +224,10 @@ namespace Game.Config
         [SerializeField] private bool m_enableNewbornRush = true;
 
         [Tooltip("新生僵尸冲刺持续时间（秒）")]
-        [SerializeField] private float m_newbornRushDuration = 0.8f;
+        [SerializeField] private float m_newbornRushDuration = 0.25f;
 
         [Tooltip("新生僵尸冲刺速度倍率")]
-        [SerializeField] private float m_newbornRushSpeedMultiplier = 2.0f;
+        [SerializeField] private float m_newbornRushSpeedMultiplier = 1.25f;
 
         /// <summary>是否启用新生僵尸冲刺。</summary>
         public bool EnableNewbornRush => m_enableNewbornRush;
@@ -251,10 +251,10 @@ namespace Game.Config
         [SerializeField] private float m_finalFrenzyClusterSpawnInterval = 1f;
 
         [Tooltip("末日狂潮大簇最少人数")]
-        [SerializeField] private int m_finalFrenzyLargeClusterMin = 15;
+        [SerializeField] private int m_finalFrenzyLargeClusterMin = 10;
 
         [Tooltip("末日狂潮大簇最多人数")]
-        [SerializeField] private int m_finalFrenzyLargeClusterMax = 20;
+        [SerializeField] private int m_finalFrenzyLargeClusterMax = 14;
 
         /// <summary>是否启用末日狂潮。</summary>
         public bool EnableFinalFrenzy => m_enableFinalFrenzy;
@@ -275,7 +275,7 @@ namespace Game.Config
         [SerializeField] private bool m_enableFinalFrenzyHumanCapOverride = true;
 
         [Tooltip("末日狂潮期间的人类数量上限")]
-        [SerializeField] private int m_finalFrenzyHumanMaxCount = 100;
+        [SerializeField] private int m_finalFrenzyHumanMaxCount = 80;
 
         /// <summary>末日狂潮期间是否临时提高人类上限。</summary>
         public bool EnableFinalFrenzyHumanCapOverride => m_enableFinalFrenzyHumanCapOverride;

@@ -19,9 +19,9 @@ MonoBehaviour:
   m_humanMaxCount: 50
   m_humanInitialCount: 20
   m_humanSpawnInterval: 1
-  m_zombieCompanionSpeed: 4
-  m_zombieCompanionPerceptionRadius: 5
-  m_zombieCompanionMaxCount: 30
+  m_zombieCompanionSpeed: 3.2
+  m_zombieCompanionPerceptionRadius: 3.75
+  m_zombieCompanionMaxCount: 60
   m_baseInfectionRadius: 1.5
   m_expPerInfection: 5
   m_goldPerInfection: 1
@@ -39,15 +39,15 @@ MonoBehaviour:
   m_sScoreInfectedCount: 250
   m_ssScoreInfectedCount: 350
   m_enableInfectionBurst: 1
-  m_infectionBurstRadius: 1.2
-  m_infectionBurstMaxTargets: 3
+  m_infectionBurstRadius: 0.7
+  m_infectionBurstMaxTargets: 1
   m_enableNewbornRush: 1
-  m_newbornRushDuration: 0.8
-  m_newbornRushSpeedMultiplier: 2
+  m_newbornRushDuration: 0.25
+  m_newbornRushSpeedMultiplier: 1.25
   m_enableFinalFrenzy: 1
   m_finalFrenzyStartRemainingTime: 30
   m_finalFrenzyClusterSpawnInterval: 1
-  m_finalFrenzyLargeClusterMin: 15
-  m_finalFrenzyLargeClusterMax: 20
+  m_finalFrenzyLargeClusterMin: 10
+  m_finalFrenzyLargeClusterMax: 14
   m_enableFinalFrenzyHumanCapOverride: 1
-  m_finalFrenzyHumanMaxCount: 100
+  m_finalFrenzyHumanMaxCount: 80

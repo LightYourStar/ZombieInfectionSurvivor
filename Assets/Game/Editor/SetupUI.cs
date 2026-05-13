@@ -34,10 +34,14 @@ public static class SetupUI
         // ===== HUDPanel =====
         var hudPanel = CreatePanel("HUDPanel", canvasRT, false);
         var hudRT = hudPanel.GetComponent<RectTransform>();
-        var timeTextComp = CreateText("TimeText", hudRT, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -20), new Vector2(200, 50), "04:00", 32, Color.white);
+        var timeTextComp = CreateText("TimeText", hudRT, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -20), new Vector2(200, 50), "03:00", 32, Color.white);
         var levelTextComp = CreateText("LevelText", hudRT, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(20, -20), new Vector2(150, 40), "Lv.1", 24, Color.white);
         var expTextComp = CreateText("ExpText", hudRT, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(20, -60), new Vector2(200, 40), "EXP: 0", 20, Color.white);
         var goldTextComp = CreateText("GoldText", hudRT, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-20, -20), new Vector2(200, 40), "金币: 0", 24, Color.yellow);
+        var infectionCountTextComp = CreateText("InfectionCountText", hudRT, new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1), new Vector2(20, -100), new Vector2(200, 40), "0/80", 24, Color.white);
+        var ratingPreviewTextComp = CreateText("RatingPreviewText", hudRT, new Vector2(1, 1), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-20, -60), new Vector2(200, 40), "C", 24, Color.cyan);
+        var victoryIndicatorTextComp = CreateText("VictoryIndicator", hudRT, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0, -75), new Vector2(220, 40), "\u76EE\u6807\u8FBE\u6210", 24, new Color(0.4f, 1f, 0.4f));
+        victoryIndicatorTextComp.gameObject.SetActive(false);
         var hudPanelComp = hudPanel.AddComponent<HUDPanel>();
 
         // ===== UpgradePanel =====
@@ -78,6 +82,19 @@ public static class SetupUI
         var sExpText = CreateText("ExpText", settRT, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, -20), new Vector2(300, 50), "经验: 0", 24, Color.cyan);
         var contBtn = CreateButton("ContinueButton", settRT, new Vector2(0, -100), new Vector2(200, 60), "继续", new Color(0.2f, 0.7f, 0.3f));
         var settlementPanelComp = settlementPanel.AddComponent<SettlementPanel>();
+
+        // ===== ResultPanel =====
+        var resultPanelGO = GameObject.Find("ResultPanel");
+        if (resultPanelGO == null)
+        {
+            resultPanelGO = new GameObject("ResultPanel", typeof(RectTransform));
+            resultPanelGO.transform.SetParent(canvasRT, false);
+        }
+        var resultPanelComp = resultPanelGO.GetComponent<ResultPanel>();
+        if (resultPanelComp == null)
+        {
+            resultPanelComp = resultPanelGO.AddComponent<ResultPanel>();
+        }
 
         // ===== VirtualJoystick =====
         var jsBG = new GameObject("VirtualJoystick", typeof(RectTransform), typeof(Image));
@@ -120,6 +137,11 @@ public static class SetupUI
         gsrSO.FindProperty("m_hudPanel").objectReferenceValue = hudPanelComp;
         gsrSO.FindProperty("m_upgradePanel").objectReferenceValue = upgradePanelComp;
         gsrSO.FindProperty("m_settlementPanel").objectReferenceValue = settlementPanelComp;
+        var resultPanelProp = gsrSO.FindProperty("m_resultPanel");
+        if (resultPanelProp != null)
+        {
+            resultPanelProp.objectReferenceValue = resultPanelComp;
+        }
         gsrSO.ApplyModifiedProperties();
 
         // StartPanel
@@ -134,6 +156,9 @@ public static class SetupUI
         hudSO.FindProperty("m_expText").objectReferenceValue = expTextComp;
         hudSO.FindProperty("m_levelText").objectReferenceValue = levelTextComp;
         hudSO.FindProperty("m_goldText").objectReferenceValue = goldTextComp;
+        hudSO.FindProperty("m_infectionCountText").objectReferenceValue = infectionCountTextComp;
+        hudSO.FindProperty("m_ratingPreviewText").objectReferenceValue = ratingPreviewTextComp;
+        hudSO.FindProperty("m_victoryIndicator").objectReferenceValue = victoryIndicatorTextComp.gameObject;
         hudSO.ApplyModifiedProperties();
 
         // UpgradePanel

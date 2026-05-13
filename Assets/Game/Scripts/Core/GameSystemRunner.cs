@@ -83,6 +83,11 @@ namespace Game.Core
         [Tooltip("结算面板")]
         [SerializeField] private SettlementPanel m_settlementPanel;
 
+        [Header("单局管理")]
+        [SerializeField] private GameSessionController m_sessionController;
+        [SerializeField] private HumanClusterSpawner m_clusterSpawner;
+        [SerializeField] private ResultPanel m_resultPanel;
+
         // ==================== 内部运行时状态 ====================
 
         /// <summary>玩家运行时属性实例，每局初始化时创建</summary>
@@ -153,6 +158,12 @@ namespace Game.Core
                 m_experienceSystem.OnLevelUp -= HandleLevelUp;
             }
 
+            // 取消订阅 GameSessionController 实例事件
+            if (m_sessionController != null)
+            {
+                m_sessionController.OnSessionEnd -= HandleSessionEnd;
+            }
+
             // 清空所有全局事件订阅，防止场景卸载后残留引用
             GameEvents.ClearAllSubscriptions();
         }
@@ -214,10 +225,23 @@ namespace Game.Core
                 m_upgradeSystem.Initialize(m_playerStats);
             }
 
-            // 9. 初始化 HUD（注入 TimerSystem 以订阅时间变化）
+            // 初始化单局控制器
+            if (m_sessionController != null)
+            {
+                m_sessionController.Initialize();
+            }
+            // 初始化簇刷新系统
+            if (m_clusterSpawner != null)
+            {
+                m_clusterSpawner.Initialize(() => m_infectionSystem != null
+                    ? m_infectionSystem.GetActiveZombiePositions()
+                    : null);
+            }
+
+            // 9. 初始化 HUD（注入 TimerSystem 和 SessionController 以订阅时间变化和单局事件）
             if (m_hudPanel != null)
             {
-                m_hudPanel.Initialize(m_timerSystem);
+                m_hudPanel.Initialize(m_timerSystem, m_sessionController);
             }
 
             // 10. 初始化 UI 管理器（会隐藏所有面板并显示 StartPanel）
@@ -254,6 +278,12 @@ namespace Game.Core
             {
                 m_experienceSystem.OnLevelUp += HandleLevelUp;
             }
+
+            // 单局结束 → 显示结算面板
+            if (m_sessionController != null && m_resultPanel != null)
+            {
+                m_sessionController.OnSessionEnd += HandleSessionEnd;
+            }
         }
 
         // ==================== Playing 状态每帧调度 ====================
@@ -277,10 +307,10 @@ namespace Game.Core
                 m_playerController.UpdateRotation(rotDir, rotSpeed, deltaTime);
             }
 
-            // 2. 人类刷新（按间隔补充新 Human）
-            if (m_spawnSystem != null)
+            // 2. 人类刷新（按簇间隔补充新 Human）
+            if (m_clusterSpawner != null)
             {
-                m_spawnSystem.UpdateSpawn(deltaTime);
+                m_clusterSpawner.UpdateSpawn(deltaTime);
             }
 
             // 3. 人类 AI 行为（逃跑/漫游）
@@ -398,8 +428,19 @@ namespace Game.Core
                 m_timerSystem.Reset();
             }
 
-            // 生成初始批次 Human
-            if (m_spawnSystem != null)
+            // 启动单局控制器
+            if (m_sessionController != null)
+            {
+                m_sessionController.StartSession();
+            }
+
+            // 生成初始批次 Human（使用簇刷新系统替代）
+            if (m_clusterSpawner != null)
+            {
+                m_clusterSpawner.Reset();
+                m_clusterSpawner.SpawnInitialClusters();
+            }
+            else if (m_spawnSystem != null)
             {
                 m_spawnSystem.SpawnInitialBatch();
             }
@@ -415,6 +456,18 @@ namespace Game.Core
             {
                 m_uiManager.ShowHUD();
             }
+
+            // 隐藏结算面板（确保 ResultPanel 在 Playing 状态隐藏）
+            if (m_resultPanel != null)
+            {
+                m_resultPanel.HideResult();
+            }
+
+            // 隐藏 HUD 上的目标达成提示（新一局开始时重置）
+            if (m_hudPanel != null)
+            {
+                m_hudPanel.HideVictoryIndicator();
+            }
         }
 
         /// <summary>
@@ -422,6 +475,12 @@ namespace Game.Core
         /// </summary>
         private void HandleSettlement()
         {
+            // 结束单局控制器
+            if (m_sessionController != null)
+            {
+                m_sessionController.EndSession();
+            }
+
             // 停止倒计时（防止残余帧继续递减）
             if (m_timerSystem != null)
             {
@@ -438,7 +497,18 @@ namespace Game.Core
                 }
             }
 
-            // 显示结算面板
+            // 新的 ResultPanel 已接管结算展示时，这里只做停表与持久化，
+            // 面板显示由 HandleSessionEnd 统一处理，避免与旧 SettlementPanel 重叠。
+            if (m_resultPanel != null)
+            {
+                if (m_uiManager != null)
+                {
+                    m_uiManager.HideAll();
+                }
+                return;
+            }
+
+            // 兼容旧流程：未配置 ResultPanel 时回退到 SettlementPanel
             if (m_uiManager != null)
             {
                 m_uiManager.ShowSettlementPanel();
@@ -533,7 +603,7 @@ namespace Game.Core
             // 恢复倒计时
             if (m_timerSystem != null)
             {
-                m_timerSystem.StartTimer();
+                m_timerSystem.ResumeTimer();
             }
         }
 
@@ -545,6 +615,43 @@ namespace Game.Core
             if (m_stateManager != null)
             {
                 m_stateManager.ChangeState(GameState.Settlement);
+            }
+        }
+
+        /// <summary>
+        /// 处理单局结束事件：隐藏 HUD，显示 ResultPanel 并绑定 Restart 回调。
+        /// 由 GameSessionController.OnSessionEnd 事件触发。
+        /// </summary>
+        /// <param name="result">本局结算数据</param>
+        private void HandleSessionEnd(SessionResult result)
+        {
+            if (m_uiManager != null)
+            {
+                m_uiManager.HideAll();
+            }
+
+            // 显示 ResultPanel，绑定 Restart 回调
+            if (m_resultPanel != null)
+            {
+                m_resultPanel.ShowResult(result, HandleRestart);
+            }
+        }
+
+        /// <summary>
+        /// 处理 ResultPanel 的 Restart 按钮回调：隐藏 ResultPanel，重新开始新一局。
+        /// </summary>
+        private void HandleRestart()
+        {
+            // 隐藏 ResultPanel
+            if (m_resultPanel != null)
+            {
+                m_resultPanel.HideResult();
+            }
+
+            // 切换到 Playing 状态开始新一局
+            if (m_stateManager != null)
+            {
+                m_stateManager.ChangeState(GameState.Playing);
             }
         }
 

@@ -118,6 +118,37 @@ namespace Game.Core
             OnGoldChanged?.Invoke(currentGold);
         }
 
+        // ==================== 单局状态事件 ====================
+
+        /// <summary>
+        /// 单局状态变化事件，参数为切换后的新 SessionState，由 GameSessionController 在状态切换时触发
+        /// </summary>
+        public static event Action<SessionState> OnSessionStateChanged;
+
+        /// <summary>
+        /// 触发单局状态变化事件
+        /// </summary>
+        /// <param name="newState">切换后的新单局状态</param>
+        public static void RaiseSessionStateChanged(SessionState newState)
+        {
+            OnSessionStateChanged?.Invoke(newState);
+        }
+
+        /// <summary>
+        /// 感染计数变化事件，参数为当前感染人数和目标感染人数，供 HUD 订阅刷新显示
+        /// </summary>
+        public static event Action<int, int> OnInfectionCountChanged;
+
+        /// <summary>
+        /// 触发感染计数变化事件
+        /// </summary>
+        /// <param name="current">当前感染人数</param>
+        /// <param name="target">目标感染人数</param>
+        public static void RaiseInfectionCountChanged(int current, int target)
+        {
+            OnInfectionCountChanged?.Invoke(current, target);
+        }
+
         // ==================== 清理 ====================
 
         /// <summary>
@@ -132,6 +163,8 @@ namespace Game.Core
             OnTimerEnd = null;
             OnExpChanged = null;
             OnGoldChanged = null;
+            OnSessionStateChanged = null;
+            OnInfectionCountChanged = null;
         }
     }
 }

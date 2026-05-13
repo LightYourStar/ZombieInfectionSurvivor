@@ -205,6 +205,28 @@ namespace Game.Gameplay.Wave
         }
 
         /// <summary>
+        /// 将外部生成的 Human 注册到活跃列表中。
+        /// 主要由 HumanClusterSpawner 在簇生成后调用，保持活跃列表的一致性。
+        /// 若传入 null 或已在活跃列表中的实例将被忽略。
+        /// </summary>
+        /// <param name="human">需要注册的 Human 实例</param>
+        public void RegisterHuman(HumanUnit human)
+        {
+            if (human == null)
+            {
+                return;
+            }
+
+            // 避免重复注册
+            if (m_activeHumans.Contains(human))
+            {
+                return;
+            }
+
+            m_activeHumans.Add(human);
+        }
+
+        /// <summary>
         /// 将指定 Human 从活跃列表中移除并归还到对象池。
         /// 主要由 InfectionSystem 在感染成功后调用。
         /// 若传入 null 或未在活跃列表中的实例将被忽略。

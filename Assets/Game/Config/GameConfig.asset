@@ -30,6 +30,11 @@ MonoBehaviour:
   m_speedPerUpgrade: 0.5
   m_zombieCapPerUpgrade: 5
   m_expMultiplierPerUpgrade: 0.1
-  m_matchDuration: 240
+  m_playerRotationSpeed: 720
+  m_matchDuration: 180
   m_humanPoolInitialSize: 60
   m_zombiePoolInitialSize: 40
+  m_targetInfectedCount: 80
+  m_aScoreInfectedCount: 150
+  m_sScoreInfectedCount: 250
+  m_ssScoreInfectedCount: 350

@@ -33,7 +33,8 @@
         "assets-prefab-save",
         "object-get-data",
         "tool-list",
-        "object-modify"
+        "object-modify",
+        "tests-run"
       ]
     }
   }

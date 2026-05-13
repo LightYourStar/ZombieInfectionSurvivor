@@ -75,6 +75,15 @@ namespace Game.Core
         }
 
         /// <summary>
+        /// 恢复倒计时（不重置剩余时间）。
+        /// 通常在升级面板关闭后调用，从暂停处继续倒计时。
+        /// </summary>
+        public void ResumeTimer()
+        {
+            m_isRunning = true;
+        }
+
+        /// <summary>
         /// 重置倒计时到满时长并停止运行。
         /// 通常在新一局开始前调用。
         /// </summary>

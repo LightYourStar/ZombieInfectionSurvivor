@@ -149,7 +149,7 @@ namespace Game.Config
 
         [Header("单局时长")]
         [Tooltip("单局游戏总时长（秒），建议范围 180 ~ 300")]
-        [SerializeField, Range(180f, 300f)] private float m_matchDuration = 240f;
+        [SerializeField, Range(180f, 300f)] private float m_matchDuration = 180f;
 
         /// <summary>单局游戏总时长（秒）。</summary>
         public float MatchDuration => m_matchDuration;
@@ -168,5 +168,32 @@ namespace Game.Config
 
         /// <summary>ZombieCompanion 对象池初始预创建数量。</summary>
         public int ZombiePoolInitialSize => m_zombiePoolInitialSize;
+
+        // ==================== 单局目标与评级 ====================
+
+        [Header("单局目标与评级")]
+        [Tooltip("通关所需的目标感染人数")]
+        [SerializeField] private int m_targetInfectedCount = 80;
+
+        [Tooltip("A 级评分所需感染人数阈值")]
+        [SerializeField] private int m_aScoreInfectedCount = 150;
+
+        [Tooltip("S 级评分所需感染人数阈值")]
+        [SerializeField] private int m_sScoreInfectedCount = 250;
+
+        [Tooltip("SS 级评分所需感染人数阈值")]
+        [SerializeField] private int m_ssScoreInfectedCount = 350;
+
+        /// <summary>通关所需的目标感染人数。</summary>
+        public int TargetInfectedCount => m_targetInfectedCount;
+
+        /// <summary>A 级评分所需感染人数阈值。</summary>
+        public int AScoreInfectedCount => m_aScoreInfectedCount;
+
+        /// <summary>S 级评分所需感染人数阈值。</summary>
+        public int SScoreInfectedCount => m_sScoreInfectedCount;
+
+        /// <summary>SS 级评分所需感染人数阈值。</summary>
+        public int SSScoreInfectedCount => m_ssScoreInfectedCount;
     }
 }

@@ -245,6 +245,8 @@ namespace Game.Core
             }
 
             // 9. 初始化 HUD（注入 TimerSystem 和 SessionController 以订阅时间变化和单局事件）
+            EnsureTemporaryMapBoundary();
+
             if (m_hudPanel != null)
             {
                 m_hudPanel.Initialize(m_timerSystem, m_sessionController);
@@ -806,6 +808,24 @@ namespace Game.Core
 #endif
         }
 
+        private void EnsureTemporaryMapBoundary()
+        {
+            if (m_spawnSystem == null)
+            {
+                return;
+            }
+
+            TemporaryMapBoundary boundary = FindObjectOfType<TemporaryMapBoundary>();
+            if (boundary == null)
+            {
+                GameObject boundaryObject = new GameObject("TemporaryMapBoundary");
+                boundaryObject.transform.SetParent(transform, false);
+                boundary = boundaryObject.AddComponent<TemporaryMapBoundary>();
+            }
+
+            boundary.Initialize(m_spawnSystem);
+        }
+
         // ==================== 感染 VFX 池 ====================
 
         /// <summary>
@@ -827,6 +847,130 @@ namespace Game.Core
             vfxGo.transform.SetParent(transform, false);
             vfxGo.AddComponent<InfectionVFXPool>();
             // AddComponent 会触发 Awake，OnEnable 会在 GameObject 激活时自动订阅事件
+        }
+    }
+
+    internal sealed class TemporaryMapBoundary : MonoBehaviour
+    {
+        [SerializeField] private SpawnSystem m_spawnSystem;
+        [SerializeField] private float m_borderThickness = 2.5f;
+        [SerializeField] private Color m_floorColor = new Color(0.18f, 0.22f, 0.18f, 1f);
+        [SerializeField] private Color m_borderColor = new Color(0.9f, 0.22f, 0.12f, 0.95f);
+
+        private SpriteRenderer m_floorRenderer;
+        private SpriteRenderer m_leftBorderRenderer;
+        private SpriteRenderer m_rightBorderRenderer;
+        private SpriteRenderer m_topBorderRenderer;
+        private SpriteRenderer m_bottomBorderRenderer;
+
+        private static Sprite s_pixelSprite;
+
+        public void Initialize(SpawnSystem spawnSystem)
+        {
+            m_spawnSystem = spawnSystem;
+            RebuildVisual();
+        }
+
+        private void Awake()
+        {
+            EnsureRenderers();
+        }
+
+        private void OnValidate()
+        {
+            m_borderThickness = Mathf.Max(0.5f, m_borderThickness);
+
+            if (Application.isPlaying)
+            {
+                RebuildVisual();
+            }
+        }
+
+        private void RebuildVisual()
+        {
+            if (m_spawnSystem == null)
+            {
+                return;
+            }
+
+            EnsureRenderers();
+
+            Vector2 mapMin = m_spawnSystem.MapMin;
+            Vector2 mapMax = m_spawnSystem.MapMax;
+            Vector2 center = (mapMin + mapMax) * 0.5f;
+            Vector2 size = mapMax - mapMin;
+            float thickness = Mathf.Min(m_borderThickness, Mathf.Min(size.x, size.y));
+
+            ApplyRenderer(m_floorRenderer, center, new Vector2(size.x, size.y), m_floorColor, -50);
+            ApplyRenderer(m_leftBorderRenderer, new Vector2(mapMin.x + thickness * 0.5f, center.y), new Vector2(thickness, size.y + thickness * 2f), m_borderColor, 20);
+            ApplyRenderer(m_rightBorderRenderer, new Vector2(mapMax.x - thickness * 0.5f, center.y), new Vector2(thickness, size.y + thickness * 2f), m_borderColor, 20);
+            ApplyRenderer(m_topBorderRenderer, new Vector2(center.x, mapMax.y - thickness * 0.5f), new Vector2(size.x, thickness), m_borderColor, 20);
+            ApplyRenderer(m_bottomBorderRenderer, new Vector2(center.x, mapMin.y + thickness * 0.5f), new Vector2(size.x, thickness), m_borderColor, 20);
+        }
+
+        private void EnsureRenderers()
+        {
+            m_floorRenderer = EnsureChildRenderer("Floor", ref m_floorRenderer);
+            m_leftBorderRenderer = EnsureChildRenderer("BorderLeft", ref m_leftBorderRenderer);
+            m_rightBorderRenderer = EnsureChildRenderer("BorderRight", ref m_rightBorderRenderer);
+            m_topBorderRenderer = EnsureChildRenderer("BorderTop", ref m_topBorderRenderer);
+            m_bottomBorderRenderer = EnsureChildRenderer("BorderBottom", ref m_bottomBorderRenderer);
+        }
+
+        private SpriteRenderer EnsureChildRenderer(string childName, ref SpriteRenderer renderer)
+        {
+            if (renderer != null)
+            {
+                return renderer;
+            }
+
+            Transform child = transform.Find(childName);
+            if (child == null)
+            {
+                GameObject childObject = new GameObject(childName, typeof(SpriteRenderer));
+                childObject.transform.SetParent(transform, false);
+                child = childObject.transform;
+            }
+
+            renderer = child.GetComponent<SpriteRenderer>();
+            if (renderer == null)
+            {
+                renderer = child.gameObject.AddComponent<SpriteRenderer>();
+            }
+
+            renderer.sprite = GetPixelSprite();
+            return renderer;
+        }
+
+        private static void ApplyRenderer(SpriteRenderer renderer, Vector2 center, Vector2 size, Color color, int sortingOrder)
+        {
+            if (renderer == null)
+            {
+                return;
+            }
+
+            Transform targetTransform = renderer.transform;
+            targetTransform.localPosition = new Vector3(center.x, center.y, 0f);
+            targetTransform.localRotation = Quaternion.identity;
+            targetTransform.localScale = new Vector3(size.x, size.y, 1f);
+            renderer.color = color;
+            renderer.sortingOrder = sortingOrder;
+        }
+
+        private static Sprite GetPixelSprite()
+        {
+            if (s_pixelSprite != null)
+            {
+                return s_pixelSprite;
+            }
+
+            Texture2D texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            texture.name = "TemporaryMapBoundaryPixel";
+            texture.SetPixel(0, 0, Color.white);
+            texture.Apply();
+
+            s_pixelSprite = Sprite.Create(texture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f), 1f);
+            return s_pixelSprite;
         }
     }
 }

@@ -243,8 +243,8 @@ namespace Game.UI
             go.transform.SetParent(transform, false);
 
             RectTransform rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.65f);
-            rect.anchorMax = new Vector2(0.5f, 0.65f);
+            rect.anchorMin = new Vector2(0.5f, 0.78f);
+            rect.anchorMax = new Vector2(0.5f, 0.78f);
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
             rect.sizeDelta = new Vector2(500f, 80f);

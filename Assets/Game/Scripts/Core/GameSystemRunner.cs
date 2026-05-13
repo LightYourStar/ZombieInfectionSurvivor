@@ -231,10 +231,11 @@ namespace Game.Core
                 m_infectionSystem.Initialize(m_playerStats, sessionState);
             }
 
-            // 初始化单局控制器
+            // 初始化单局控制器（需要先确保 ComboTracker 存在）
             if (m_sessionController != null)
             {
-                m_sessionController.Initialize();
+                InfectionComboTracker comboRef = EnsureComboTracker();
+                m_sessionController.Initialize(comboRef, m_upgradeSystem);
             }
             // 初始化簇刷新系统
             if (m_clusterSpawner != null)
@@ -753,13 +754,8 @@ namespace Game.Core
                 debugRoot.transform.SetParent(transform, false);
             }
 
-            InfectionComboTracker comboTracker = debugRoot.GetComponentInChildren<InfectionComboTracker>(true);
-            if (comboTracker == null)
-            {
-                GameObject trackerObject = new GameObject("InfectionComboTracker");
-                trackerObject.transform.SetParent(debugRoot.transform, false);
-                comboTracker = trackerObject.AddComponent<InfectionComboTracker>();
-            }
+            // 复用已由 EnsureComboTracker() 创建的唯一实例，不再私自新建
+            InfectionComboTracker comboTracker = FindObjectOfType<InfectionComboTracker>();
 
             DebugStatsPanel debugStatsPanel = debugRoot.GetComponentInChildren<DebugStatsPanel>(true);
             if (debugStatsPanel == null)
@@ -804,7 +800,10 @@ namespace Game.Core
                 m_playerStats,
                 m_gameConfig);
 
-            feedbackDisplay.Initialize(comboTracker, targetCamera);
+            feedbackDisplay.Initialize(
+                comboTracker,
+                targetCamera,
+                m_upgradePanel != null ? m_upgradePanel.GetComponent<RectTransform>() : null);
 #endif
         }
 
@@ -835,18 +834,32 @@ namespace Game.Core
         /// </summary>
         private void EnsureInfectionVFXPool()
         {
-            // 先检查场景中是否已有（Inspector 手动挂载的情况）
             InfectionVFXPool existing = FindObjectOfType<InfectionVFXPool>();
             if (existing != null)
             {
                 return;
             }
 
-            // 自动创建
             GameObject vfxGo = new GameObject("InfectionVFXPool");
             vfxGo.transform.SetParent(transform, false);
             vfxGo.AddComponent<InfectionVFXPool>();
-            // AddComponent 会触发 Awake，OnEnable 会在 GameObject 激活时自动订阅事件
+        }
+
+        /// <summary>
+        /// 确保场景中存在 InfectionComboTracker。若不存在则创建。
+        /// 返回找到或创建的实例引用。
+        /// </summary>
+        private InfectionComboTracker EnsureComboTracker()
+        {
+            InfectionComboTracker existing = FindObjectOfType<InfectionComboTracker>();
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            GameObject go = new GameObject("InfectionComboTracker");
+            go.transform.SetParent(transform, false);
+            return go.AddComponent<InfectionComboTracker>();
         }
     }
 

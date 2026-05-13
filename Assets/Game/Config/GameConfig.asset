@@ -34,10 +34,10 @@ MonoBehaviour:
   m_matchDuration: 180
   m_humanPoolInitialSize: 60
   m_zombiePoolInitialSize: 40
-  m_targetInfectedCount: 80
-  m_aScoreInfectedCount: 150
-  m_sScoreInfectedCount: 250
-  m_ssScoreInfectedCount: 350
+  m_targetInfectedCount: 240
+  m_aScoreInfectedCount: 320
+  m_sScoreInfectedCount: 440
+  m_ssScoreInfectedCount: 560
   m_enableInfectionBurst: 1
   m_infectionBurstRadius: 0.7
   m_infectionBurstMaxTargets: 1

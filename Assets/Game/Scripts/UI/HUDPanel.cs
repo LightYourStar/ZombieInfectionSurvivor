@@ -39,6 +39,10 @@ namespace Game.UI
         [Tooltip("末日狂潮提示对象，进入 Final Frenzy 时显示")]
         [SerializeField] private GameObject m_frenzyIndicator;
 
+        [Header("目标提示")]
+        [Tooltip("下一目标提示文本（可选，未赋值时自动创建）")]
+        [SerializeField] private Text m_nextGoalText;
+
         // ==================== 运行时依赖 ====================
 
         /// <summary>TimerSystem 引用，用于订阅时间变化事件</summary>
@@ -178,6 +182,9 @@ namespace Game.UI
             {
                 m_infectionCountText.text = $"{current}/{target}";
             }
+
+            // 更新下一目标提示
+            UpdateNextGoalText();
         }
 
         /// <summary>
@@ -252,6 +259,9 @@ namespace Game.UI
 
             m_frenzyIndicator.SetActive(true);
             m_frenzyCoroutine = StartCoroutine(FrenzyIndicatorAnimation());
+
+            // 狂潮开始时立刻刷新目标提示，切换为冲刺语气
+            UpdateNextGoalText();
         }
 
         /// <summary>
@@ -329,6 +339,51 @@ namespace Game.UI
             m_frenzyCoroutine = null;
         }
 
+        // ==================== 目标提示 ====================
+
+        /// <summary>
+        /// 更新"下一目标提示"文本，从 GameSessionController 获取。
+        /// </summary>
+        private void UpdateNextGoalText()
+        {
+            EnsureNextGoalText();
+            if (m_nextGoalText != null && m_sessionController != null)
+            {
+                m_nextGoalText.text = m_sessionController.GetNextGoalText();
+            }
+        }
+
+        /// <summary>
+        /// 如果 m_nextGoalText 未赋值，运行时自动创建。
+        /// </summary>
+        private void EnsureNextGoalText()
+        {
+            if (m_nextGoalText != null)
+            {
+                return;
+            }
+
+            GameObject go = new GameObject("NextGoalText", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            go.transform.SetParent(transform, false);
+
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.92f);
+            rect.anchorMax = new Vector2(0.5f, 0.92f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = new Vector2(400f, 36f);
+
+            Text text = go.GetComponent<Text>();
+            text.text = "";
+            text.fontSize = 18;
+            text.fontStyle = FontStyle.Normal;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = new Color(0.9f, 0.9f, 0.6f, 1f);
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+            m_nextGoalText = text;
+        }
+
         /// <summary>
         /// 如果 m_frenzyIndicator 未在 Inspector 中赋值，则在运行时自动创建一个简单的文本提示。
         /// </summary>
@@ -351,7 +406,7 @@ namespace Game.UI
             rect.sizeDelta = new Vector2(400f, 60f);
 
             Text text = go.GetComponent<Text>();
-            text.text = "FINAL FRENZY";
+            text.text = "末日狂潮";
             text.fontSize = 32;
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.MiddleCenter;

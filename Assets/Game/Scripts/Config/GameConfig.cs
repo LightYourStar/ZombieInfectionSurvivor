@@ -173,16 +173,16 @@ namespace Game.Config
 
         [Header("单局目标与评级")]
         [Tooltip("通关所需的目标感染人数")]
-        [SerializeField] private int m_targetInfectedCount = 80;
+        [SerializeField] private int m_targetInfectedCount = 240;
 
         [Tooltip("A 级评分所需感染人数阈值")]
-        [SerializeField] private int m_aScoreInfectedCount = 150;
+        [SerializeField] private int m_aScoreInfectedCount = 320;
 
         [Tooltip("S 级评分所需感染人数阈值")]
-        [SerializeField] private int m_sScoreInfectedCount = 250;
+        [SerializeField] private int m_sScoreInfectedCount = 440;
 
         [Tooltip("SS 级评分所需感染人数阈值")]
-        [SerializeField] private int m_ssScoreInfectedCount = 350;
+        [SerializeField] private int m_ssScoreInfectedCount = 560;
 
         /// <summary>通关所需的目标感染人数。</summary>
         public int TargetInfectedCount => m_targetInfectedCount;

@@ -15,6 +15,8 @@ namespace Game.UI
 
         [Header("连击提示")]
         [SerializeField] private Text m_comboText;
+        [SerializeField] private RectTransform m_upgradePanelRect;
+        [SerializeField] private float m_upgradePanelTopOffset = 56f;
 
         [Header("屏幕震动")]
         [SerializeField] private Camera m_camera;
@@ -44,7 +46,7 @@ namespace Game.UI
             UnsubscribeEvents();
         }
 
-        public void Initialize(Game.Gameplay.Feedback.InfectionComboTracker comboTracker, Camera camera)
+        public void Initialize(Game.Gameplay.Feedback.InfectionComboTracker comboTracker, Camera camera, RectTransform upgradePanelRect)
         {
             m_comboTracker = comboTracker;
             if (camera != null)
@@ -52,7 +54,10 @@ namespace Game.UI
                 m_camera = camera;
             }
 
+            m_upgradePanelRect = upgradePanelRect;
+
             EnsureComboText();
+            UpdateFloatingTextPosition();
 
             if (isActiveAndEnabled)
             {
@@ -152,6 +157,7 @@ namespace Game.UI
             m_comboText.text = text;
             m_comboText.color = color;
             m_comboText.fontSize = fontSize;
+            UpdateFloatingTextPosition();
             m_comboText.gameObject.SetActive(true);
 
             if (m_comboFadeCoroutine != null)
@@ -243,8 +249,8 @@ namespace Game.UI
             go.transform.SetParent(transform, false);
 
             RectTransform rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.78f);
-            rect.anchorMax = new Vector2(0.5f, 0.78f);
+            rect.anchorMin = new Vector2(0.5f, 0.84f);
+            rect.anchorMax = new Vector2(0.5f, 0.84f);
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
             rect.sizeDelta = new Vector2(500f, 80f);
@@ -259,6 +265,44 @@ namespace Game.UI
 
             m_comboText = text;
             go.SetActive(false);
+            UpdateFloatingTextPosition();
+        }
+
+        private void UpdateFloatingTextPosition()
+        {
+            if (m_comboText == null)
+            {
+                return;
+            }
+
+            RectTransform textRect = m_comboText.rectTransform;
+            RectTransform rootRect = transform as RectTransform;
+            if (textRect == null || rootRect == null)
+            {
+                return;
+            }
+
+            if (m_upgradePanelRect == null)
+            {
+                textRect.anchorMin = new Vector2(0.5f, 0.84f);
+                textRect.anchorMax = new Vector2(0.5f, 0.84f);
+                textRect.pivot = new Vector2(0.5f, 0.5f);
+                textRect.anchoredPosition = Vector2.zero;
+                return;
+            }
+
+            Vector3[] corners = new Vector3[4];
+            m_upgradePanelRect.GetWorldCorners(corners);
+            Vector3 topCenterWorld = (corners[1] + corners[2]) * 0.5f;
+            Vector2 topCenterScreen = RectTransformUtility.WorldToScreenPoint(null, topCenterWorld);
+
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(rootRect, topCenterScreen, null, out Vector2 localPoint))
+            {
+                textRect.anchorMin = new Vector2(0.5f, 0.5f);
+                textRect.anchorMax = new Vector2(0.5f, 0.5f);
+                textRect.pivot = new Vector2(0.5f, 0.5f);
+                textRect.anchoredPosition = localPoint + Vector2.up * m_upgradePanelTopOffset;
+            }
         }
     }
 }

@@ -12,20 +12,16 @@ namespace Game.UI
     public class ResultPanel : MonoBehaviour
     {
         [Header("UI 元素")]
-        [Tooltip("感染人数文本")]
         [SerializeField] private Text m_infectedCountText;
-
-        [Tooltip("最大尸群数量文本")]
         [SerializeField] private Text m_maxZombieCountText;
-
-        [Tooltip("评级文本")]
         [SerializeField] private Text m_ratingText;
-
-        [Tooltip("通关状态文本（Victory / Failed）")]
         [SerializeField] private Text m_victoryStatusText;
-
-        [Tooltip("重新开始按钮")]
         [SerializeField] private Button m_restartButton;
+
+        // 新增结算字段（运行时自动创建）
+        private Text m_maxComboText;
+        private Text m_frenzyInfectedText;
+        private Text m_upgradeSummaryText;
 
         private GameObject m_runtimeRoot;
         private static Font s_defaultFont;
@@ -55,13 +51,21 @@ namespace Game.UI
             if (m_maxZombieCountText != null)
                 m_maxZombieCountText.text = result.MaxZombieCount.ToString();
 
+            if (m_maxComboText != null)
+                m_maxComboText.text = result.MaxCombo > 0 ? $"x{result.MaxCombo}" : "无";
+
+            if (m_frenzyInfectedText != null)
+                m_frenzyInfectedText.text = result.FrenzyInfectedCount > 0 ? result.FrenzyInfectedCount.ToString() : "未触发";
+
             if (m_ratingText != null)
                 m_ratingText.text = result.Rating.ToString();
 
             if (m_victoryStatusText != null)
-                m_victoryStatusText.text = result.IsVictory ? "Victory" : "Failed";
+                m_victoryStatusText.text = result.IsVictory ? "胜利" : "未达成";
 
-            // 移除之前的监听器，绑定新的回调
+            if (m_upgradeSummaryText != null)
+                m_upgradeSummaryText.text = result.UpgradeSummary;
+
             m_restartButton.onClick.RemoveAllListeners();
             if (onRestart != null)
             {
@@ -84,6 +88,7 @@ namespace Game.UI
             bool hasAllReferences =
                 m_infectedCountText != null &&
                 m_maxZombieCountText != null &&
+                m_maxComboText != null &&
                 m_ratingText != null &&
                 m_victoryStatusText != null &&
                 m_restartButton != null;
@@ -147,14 +152,17 @@ namespace Game.UI
             m_victoryStatusText = CreateStandaloneText(
                 "VictoryStatusText",
                 card.transform,
-                "Victory",
+                "胜利",
                 34,
                 new Color(0.96f, 0.92f, 0.68f, 1f),
                 FontStyle.Bold);
 
-            m_infectedCountText = CreateStatRow(card.transform, "本局累计感染人数", "127");
-            m_maxZombieCountText = CreateStatRow(card.transform, "最大僵尸数量", "45");
+            m_infectedCountText = CreateStatRow(card.transform, "总感染数", "127");
+            m_maxZombieCountText = CreateStatRow(card.transform, "最高僵尸数", "45");
+            m_maxComboText = CreateStatRow(card.transform, "最高连击", "x12");
+            m_frenzyInfectedText = CreateStatRow(card.transform, "狂潮阶段感染", "38");
             m_ratingText = CreateStatRow(card.transform, "最终评级", "A");
+            m_upgradeSummaryText = CreateWideStatRow(card.transform, "本局升级", "无");
 
             m_restartButton = CreateButton(card.transform, "RestartButton", "再来一局");
         }
@@ -198,6 +206,68 @@ namespace Game.UI
                 FontStyle.Bold);
             LayoutElement valueLayout = valueText.gameObject.AddComponent<LayoutElement>();
             valueLayout.preferredWidth = 120f;
+
+            return valueText;
+        }
+
+        /// <summary>
+        /// 创建宽版统计行，用于升级摘要等长文本。标签在上，内容在下，支持换行。
+        /// </summary>
+        private Text CreateWideStatRow(Transform parent, string label, string exampleValue)
+        {
+            GameObject row = new GameObject(
+                label + "Row",
+                typeof(RectTransform),
+                typeof(VerticalLayoutGroup),
+                typeof(LayoutElement),
+                typeof(ContentSizeFitter));
+            row.transform.SetParent(parent, false);
+
+            VerticalLayoutGroup vlayout = row.GetComponent<VerticalLayoutGroup>();
+            vlayout.spacing = 4f;
+            vlayout.childAlignment = TextAnchor.UpperCenter;
+            vlayout.childControlWidth = true;
+            vlayout.childControlHeight = true;
+            vlayout.childForceExpandWidth = true;
+            vlayout.childForceExpandHeight = false;
+
+            // 使用 ContentSizeFitter 让行高自适应内容，不固定高度
+            LayoutElement rowLayout = row.GetComponent<LayoutElement>();
+            rowLayout.minHeight = 48f;
+            rowLayout.flexibleHeight = 1f;
+
+            ContentSizeFitter rowFitter = row.GetComponent<ContentSizeFitter>();
+            rowFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            rowFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            CreateStandaloneText(
+                label + "Label",
+                row.transform,
+                label,
+                18,
+                new Color(0.7f, 0.72f, 0.8f, 1f),
+                FontStyle.Normal);
+
+            // 值文本：允许换行，高度自适应
+            GameObject valueGo = new GameObject(label + "Value", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text), typeof(LayoutElement));
+            valueGo.transform.SetParent(row.transform, false);
+
+            Text valueText = valueGo.GetComponent<Text>();
+            valueText.text = exampleValue;
+            valueText.font = GetDefaultFont();
+            valueText.fontSize = 16;
+            valueText.fontStyle = FontStyle.Normal;
+            valueText.alignment = TextAnchor.UpperCenter;
+            valueText.color = new Color(0.95f, 0.95f, 0.8f, 1f);
+            valueText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            valueText.verticalOverflow = VerticalWrapMode.Overflow;
+
+            LayoutElement valueLayout = valueGo.GetComponent<LayoutElement>();
+            valueLayout.minHeight = 24f;
+            valueLayout.flexibleHeight = 1f;
+
+            RectTransform valueRect = valueGo.GetComponent<RectTransform>();
+            valueRect.sizeDelta = new Vector2(0f, 24f);
 
             return valueText;
         }

@@ -11,8 +11,11 @@ namespace Game.Core
         /// <summary>本局同时存在的最大僵尸数量</summary>
         public int MaxZombieCount { get; }
 
-        /// <summary>本局最高连锁感染数（预留字段）</summary>
-        public int MaxChainCount { get; }
+        /// <summary>本局最高连击数</summary>
+        public int MaxCombo { get; }
+
+        /// <summary>狂潮阶段新增感染数（Final Frenzy 期间感染的人数）</summary>
+        public int FrenzyInfectedCount { get; }
 
         /// <summary>最终评级</summary>
         public SessionRating Rating { get; }
@@ -23,15 +26,21 @@ namespace Game.Core
         /// <summary>实际游戏时长（秒）</summary>
         public float ElapsedTime { get; }
 
-        public SessionResult(int infectedCount, int maxZombieCount, int maxChainCount,
-            SessionRating rating, bool isVictory, float elapsedTime)
+        /// <summary>本局升级摘要文本</summary>
+        public string UpgradeSummary { get; }
+
+        public SessionResult(int infectedCount, int maxZombieCount, int maxCombo,
+            int frenzyInfectedCount, SessionRating rating, bool isVictory,
+            float elapsedTime, string upgradeSummary)
         {
             InfectedCount = infectedCount;
             MaxZombieCount = maxZombieCount;
-            MaxChainCount = maxChainCount;
+            MaxCombo = maxCombo;
+            FrenzyInfectedCount = frenzyInfectedCount;
             Rating = rating;
             IsVictory = isVictory;
             ElapsedTime = elapsedTime;
+            UpgradeSummary = upgradeSummary ?? "无";
         }
     }
 }

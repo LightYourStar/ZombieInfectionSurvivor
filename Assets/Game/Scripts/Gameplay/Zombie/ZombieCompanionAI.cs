@@ -67,6 +67,95 @@ namespace Game.Gameplay.Zombie
 
         private MapRuntimeController m_cachedMapRuntimeController;
 
+        // ==================== 尸潮行为状态 ====================
+
+        /// <summary>当前尸潮行为状态</summary>
+        public enum SwarmState { Follow, Hunt, Return, Frenzy }
+
+        /// <summary>当前行为状态</summary>
+        private SwarmState m_swarmState = SwarmState.Follow;
+
+        /// <summary>跟随槽位偏移（相对于玩家位置的随机偏移）</summary>
+        private Vector2 m_followSlotOffset;
+
+        /// <summary>槽位刷新计时器</summary>
+        private float m_slotRefreshTimer;
+
+        /// <summary>槽位刷新间隔（秒）</summary>
+        private const float SlotRefreshInterval = 3f;
+
+        /// <summary>跟随最小距离</summary>
+        private const float FollowMinRadius = 2f;
+
+        /// <summary>跟随最大距离</summary>
+        private const float FollowMaxRadius = 5.5f;
+
+        /// <summary>Hunt 最大脱离玩家距离，超过则 Return</summary>
+        private const float MaxDetachDistance = 12f;
+
+        /// <summary>Hunt 目标最大距离（相对于玩家）</summary>
+        private const float MaxHuntTargetDistFromPlayer = 10f;
+
+        /// <summary>全局活跃 Hunter 计数（静态共享）</summary>
+        private static int s_activeHunterCount;
+
+        /// <summary>最大同时 Hunt 僵尸数</summary>
+        private const int MaxActiveHunters = 15;
+
+        /// <summary>是否已注册为 Hunter</summary>
+        private bool m_isRegisteredHunter;
+
+        /// <summary>当前行为状态（供 Debug 读取）</summary>
+        public SwarmState CurrentSwarmState => m_swarmState;
+
+        /// <summary>全局活跃 Hunter 数量（供 Debug 读取）</summary>
+        public static int ActiveHunterCount => s_activeHunterCount;
+
+        // ==================== 卡住检测 ====================
+
+        /// <summary>上一帧位置，用于检测移动距离</summary>
+        private Vector2 m_lastRecordedPos;
+
+        /// <summary>卡住计时器（秒）</summary>
+        private float m_stuckTimer;
+
+        /// <summary>卡住判定阈值（秒）</summary>
+        private const float StuckThreshold = 1.0f;
+
+        /// <summary>卡住判定最小移动距离</summary>
+        private const float StuckMinMoveDist = 0.1f;
+
+        /// <summary>连续卡住恢复次数</summary>
+        private int m_consecutiveStuckCount;
+
+        /// <summary>紧急传送冷却时间</summary>
+        private float m_lastTeleportTime = -999f;
+
+        /// <summary>紧急传送最小间隔（秒）</summary>
+        private const float TeleportCooldown = 5f;
+
+        /// <summary>是否当前被判定为卡住</summary>
+        public bool IsStuck => m_stuckTimer >= StuckThreshold;
+
+        /// <summary>全局卡住恢复计数（供 Debug）</summary>
+        public static int TotalStuckRecoveryCount { get; private set; }
+
+        /// <summary>全局槽位重分配计数（供 Debug）</summary>
+        public static int TotalReassignedSlotCount { get; private set; }
+
+        /// <summary>全局紧急传送计数（供 Debug）</summary>
+        public static int TotalEmergencyTeleportCount { get; private set; }
+
+        /// <summary>重置全局 Debug 计数（新局开始时调用）</summary>
+        public static void ResetGlobalDebugCounters()
+        {
+            s_activeHunterCount = 0;
+            TotalStuckRecoveryCount = 0;
+            TotalReassignedSlotCount = 0;
+            TotalEmergencyTeleportCount = 0;
+            TotalVisibleTeleportBlockedCount = 0;
+        }
+
         // ==================== 新生冲刺状态 ====================
 
         /// <summary>冲刺剩余时间（秒），> 0 时处于冲刺状态</summary>
@@ -122,6 +211,17 @@ namespace Game.Gameplay.Zombie
 
             // 重置冲刺状态（对象池复用时清理残留）
             m_rushRemainingTime = 0f;
+
+            // 初始化尸潮状态
+            UnregisterHunter();
+            m_swarmState = SwarmState.Follow;
+            RefreshFollowSlot();
+            m_slotRefreshTimer = UnityEngine.Random.Range(0f, SlotRefreshInterval);
+
+            // 重置卡住检测
+            m_stuckTimer = 0f;
+            m_consecutiveStuckCount = 0;
+            m_lastRecordedPos = m_unit != null ? m_unit.Position : Vector2.zero;
         }
 
         /// <summary>
@@ -235,14 +335,15 @@ namespace Game.Gameplay.Zombie
 
             Vector2 selfPos = m_unit.Position;
 
-            // 新生冲刺状态处理：优先朝最近 Human 高速移动
+            // 新生冲刺（Frenzy）状态处理
             if (m_rushRemainingTime > 0f)
             {
+                m_swarmState = SwarmState.Frenzy;
                 m_rushRemainingTime -= deltaTime;
                 if (m_rushRemainingTime <= 0f)
                 {
-                    // 冲刺结束，恢复视觉
                     RemoveRushVisual();
+                    m_swarmState = SwarmState.Follow;
                 }
                 else
                 {
@@ -251,68 +352,374 @@ namespace Game.Gameplay.Zombie
                 }
             }
 
-            // 1. 在感知范围内寻找最近的可追击 Human
-            HumanUnit target = TryFindTargetWithinPerception(selfPos);
+            Vector2 playerPos = m_playerTransform != null
+                ? new Vector2(m_playerTransform.position.x, m_playerTransform.position.y)
+                : selfPos;
 
-            Vector2 moveDirection;
-            if (target != null)
+            float distToPlayer = (selfPos - playerPos).magnitude;
+
+            // Return 检查：距离玩家太远则强制返回
+            if (distToPlayer > MaxDetachDistance && m_swarmState != SwarmState.Return)
             {
-                // 2a. 有目标：切换为追击状态，沿目标方向移动
-                m_unit.EnterChasing();
-                Vector2 targetPos = target.Position;
-                float sqrDistToTarget = (targetPos - selfPos).sqrMagnitude;
-
-                // 到达目标附近后停止（感染系统会处理转化），避免完全重叠
-                float stopDist = 0.3f;
-                if (sqrDistToTarget <= stopDist * stopDist)
-                {
-                    moveDirection = Vector2.zero;
-                }
-                else
-                {
-                    moveDirection = CalculateMoveDirection(selfPos, targetPos);
-                }
-            }
-            else
-            {
-                // 2b. 无目标：切换为跟随状态，沿玩家方向移动；玩家缺失时保持静止
-                m_unit.EnterFollowing();
-                if (m_playerTransform != null)
-                {
-                    Vector3 playerWorld = m_playerTransform.position;
-                    Vector2 playerPos = new Vector2(playerWorld.x, playerWorld.y);
-
-                    // 到达玩家附近一定距离后停止移动，避免所有僵尸堆叠在玩家脚下
-                    float sqrDistToPlayer = (playerPos - selfPos).sqrMagnitude;
-                    float followStopDistance = 2.0f; // 停止跟随的最小距离
-                    if (sqrDistToPlayer <= followStopDistance * followStopDistance)
-                    {
-                        moveDirection = Vector2.zero;
-                    }
-                    else
-                    {
-                        moveDirection = CalculateMoveDirection(selfPos, playerPos);
-                    }
-                }
-                else
-                {
-                    moveDirection = Vector2.zero;
-                }
+                UnregisterHunter();
+                m_swarmState = SwarmState.Return;
             }
 
-            // 3. 应用位移 + 分离力
-            // 当静止时（跟随停止或追击停止），施加随机漂移避免重叠
-            if (moveDirection.sqrMagnitude < Mathf.Epsilon)
+            // 状态机更新
+            switch (m_swarmState)
             {
-                // 每帧都施加微小随机漂移，让静止的僵尸自然散开
-                Vector2 jitter = UnityEngine.Random.insideUnitCircle * 0.3f * deltaTime;
-                Vector3 pos = transform.position;
-                MoveWithCollision(new Vector2(pos.x, pos.y), jitter);
+                case SwarmState.Follow:
+                    UpdateFollowState(selfPos, playerPos, distToPlayer, deltaTime);
+                    break;
+                case SwarmState.Hunt:
+                    UpdateHuntState(selfPos, playerPos, distToPlayer, deltaTime);
+                    break;
+                case SwarmState.Return:
+                    UpdateReturnState(selfPos, playerPos, distToPlayer, deltaTime);
+                    break;
+            }
+
+            // 卡住检测（在状态更新后执行）
+            UpdateStuckDetection(selfPos, deltaTime);
+        }
+
+        private void UpdateFollowState(Vector2 selfPos, Vector2 playerPos, float distToPlayer, float deltaTime)
+        {
+            m_unit.EnterFollowing();
+
+            // 定期刷新槽位（1.5-3 秒随机间隔）
+            m_slotRefreshTimer += deltaTime;
+            if (m_slotRefreshTimer >= SlotRefreshInterval)
+            {
+                RefreshFollowSlot();
+                m_slotRefreshTimer = UnityEngine.Random.Range(-1.5f, 0f); // 随机化下次刷新时机
+                m_slotRefreshTimer = 0f;
+            }
+
+            // 尝试转为 Hunt：只有边缘僵尸（距玩家 > FollowMinRadius）且 Hunter 名额未满
+            if (distToPlayer > FollowMinRadius && s_activeHunterCount < MaxActiveHunters)
+            {
+                HumanUnit target = TryFindHuntTarget(selfPos, playerPos);
+                if (target != null)
+                {
+                    RegisterHunter();
+                    m_swarmState = SwarmState.Hunt;
+                    UpdateHuntState(selfPos, playerPos, distToPlayer, deltaTime);
+                    return;
+                }
+            }
+
+            // 朝跟随槽位移动
+            Vector2 slotTarget = playerPos + m_followSlotOffset;
+            float sqrDistToSlot = (slotTarget - selfPos).sqrMagnitude;
+            float stopDist = 0.8f;
+
+            if (sqrDistToSlot <= stopDist * stopDist)
+            {
+                // 已到达槽位，微小漂移
+                Vector2 jitter = UnityEngine.Random.insideUnitCircle * 0.2f * deltaTime;
+                MoveWithCollision(selfPos, jitter);
                 return;
             }
 
-            Vector2 displacement = moveDirection * (m_config.ZombieCompanionSpeed * deltaTime);
+            Vector2 moveDir = CalculateMoveDirection(selfPos, slotTarget);
+            Vector2 displacement = moveDir * (m_config.ZombieCompanionSpeed * deltaTime);
             MoveWithCollision(selfPos, displacement);
+        }
+
+        private void UpdateHuntState(Vector2 selfPos, Vector2 playerPos, float distToPlayer, float deltaTime)
+        {
+            m_unit.EnterChasing();
+
+            // 检查是否应该放弃 Hunt
+            if (distToPlayer > MaxDetachDistance)
+            {
+                UnregisterHunter();
+                m_swarmState = SwarmState.Return;
+                return;
+            }
+
+            HumanUnit target = TryFindHuntTarget(selfPos, playerPos);
+            if (target == null)
+            {
+                // 目标丢失，回到 Follow
+                UnregisterHunter();
+                m_swarmState = SwarmState.Follow;
+                return;
+            }
+
+            Vector2 targetPos = target.Position;
+            float sqrDistToTarget = (targetPos - selfPos).sqrMagnitude;
+            float stopDist = 0.3f;
+
+            if (sqrDistToTarget <= stopDist * stopDist)
+            {
+                return; // 感染系统会处理转化
+            }
+
+            Vector2 moveDir = CalculateMoveDirection(selfPos, targetPos);
+            Vector2 displacement = moveDir * (m_config.ZombieCompanionSpeed * deltaTime);
+            MoveWithCollision(selfPos, displacement);
+        }
+
+        private void UpdateReturnState(Vector2 selfPos, Vector2 playerPos, float distToPlayer, float deltaTime)
+        {
+            m_unit.EnterFollowing();
+
+            // 回到跟随范围后切换为 Follow
+            if (distToPlayer <= FollowMaxRadius)
+            {
+                m_swarmState = SwarmState.Follow;
+                RefreshFollowSlot();
+                return;
+            }
+
+            // 朝跟随槽位移动（不是玩家中心）
+            Vector2 slotTarget = playerPos + m_followSlotOffset;
+            Vector2 moveDir = CalculateMoveDirection(selfPos, slotTarget);
+            // Return 时稍快一点追上
+            float returnSpeed = m_config.ZombieCompanionSpeed * 1.3f;
+            Vector2 displacement = moveDir * (returnSpeed * deltaTime);
+            MoveWithCollision(selfPos, displacement);
+        }
+
+        /// <summary>
+        /// 寻找可 Hunt 的目标：必须在感知范围内，且目标距玩家不超过 MaxHuntTargetDistFromPlayer。
+        /// </summary>
+        private HumanUnit TryFindHuntTarget(Vector2 selfPos, Vector2 playerPos)
+        {
+            if (m_getActiveHumans == null) return null;
+
+            IReadOnlyList<HumanUnit> activeHumans = m_getActiveHumans();
+            if (activeHumans == null || activeHumans.Count == 0) return null;
+
+            float perceptionRadius = m_config.ZombieCompanionPerceptionRadius;
+            if (m_sessionState != null)
+            {
+                perceptionRadius = m_sessionState.GetZombiePerceptionRadius(perceptionRadius);
+            }
+
+            float sqrPerception = perceptionRadius * perceptionRadius;
+            float sqrMaxFromPlayer = MaxHuntTargetDistFromPlayer * MaxHuntTargetDistFromPlayer;
+
+            HumanUnit best = null;
+            float bestSqrDist = float.PositiveInfinity;
+
+            for (int i = 0; i < activeHumans.Count; i++)
+            {
+                HumanUnit human = activeHumans[i];
+                if (human == null || human.IsInfected || human.IsInSpawnGrace) continue;
+
+                Vector2 humanPos = human.Position;
+
+                // 目标必须在僵尸感知范围内
+                float sqrDistToSelf = (humanPos - selfPos).sqrMagnitude;
+                if (sqrDistToSelf >= sqrPerception) continue;
+
+                // 目标必须在玩家附近一定范围内
+                float sqrDistToPlayer = (humanPos - playerPos).sqrMagnitude;
+                if (sqrDistToPlayer >= sqrMaxFromPlayer) continue;
+
+                if (sqrDistToSelf < bestSqrDist)
+                {
+                    bestSqrDist = sqrDistToSelf;
+                    best = human;
+                }
+            }
+
+            return best;
+        }
+
+        private void RefreshFollowSlot()
+        {
+            MapRuntimeController map = ResolveMapRuntimeController();
+            Vector2 playerPos = m_playerTransform != null
+                ? new Vector2(m_playerTransform.position.x, m_playerTransform.position.y)
+                : Vector2.zero;
+
+            // 尝试最多 10 次找到安全槽位
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
+                float radius = UnityEngine.Random.Range(FollowMinRadius, FollowMaxRadius);
+                Vector2 offset = new Vector2(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius);
+                Vector2 worldPos = playerPos + offset;
+
+                // 安全检查：不在阻挡内
+                if (map != null)
+                {
+                    worldPos = map.ClampToMap(worldPos, m_blockerClearance);
+                    if (map.IsPointBlocked(worldPos, m_blockerClearance))
+                    {
+                        continue;
+                    }
+                }
+
+                m_followSlotOffset = offset;
+                TotalReassignedSlotCount++;
+                return;
+            }
+
+            // 所有尝试失败，使用玩家正后方作为安全方向
+            m_followSlotOffset = new Vector2(0f, -FollowMinRadius);
+            TotalReassignedSlotCount++;
+        }
+
+        private void RegisterHunter()
+        {
+            if (!m_isRegisteredHunter)
+            {
+                m_isRegisteredHunter = true;
+                s_activeHunterCount++;
+            }
+        }
+
+        private void UnregisterHunter()
+        {
+            if (m_isRegisteredHunter)
+            {
+                m_isRegisteredHunter = false;
+                s_activeHunterCount = Mathf.Max(0, s_activeHunterCount - 1);
+            }
+        }
+
+        // ==================== 卡住检测与恢复 ====================
+
+        private void UpdateStuckDetection(Vector2 currentPos, float deltaTime)
+        {
+            float movedDist = (currentPos - m_lastRecordedPos).magnitude;
+
+            if (movedDist < StuckMinMoveDist)
+            {
+                m_stuckTimer += deltaTime;
+            }
+            else
+            {
+                m_stuckTimer = 0f;
+                m_consecutiveStuckCount = 0;
+            }
+
+            m_lastRecordedPos = currentPos;
+
+            // 卡住判定
+            if (m_stuckTimer >= StuckThreshold)
+            {
+                HandleStuckRecovery(currentPos);
+                m_stuckTimer = 0f;
+            }
+        }
+
+        private void HandleStuckRecovery(Vector2 currentPos)
+        {
+            m_consecutiveStuckCount++;
+            TotalStuckRecoveryCount++;
+
+            // 按状态处理：只重分配目标/切换状态，不直接移动位置
+            switch (m_swarmState)
+            {
+                case SwarmState.Hunt:
+                    // 放弃当前目标，切换到 Return
+                    UnregisterHunter();
+                    m_swarmState = SwarmState.Return;
+                    RefreshFollowSlot();
+                    break;
+
+                case SwarmState.Return:
+                    // 重新选择一个不同方向的槽位
+                    RefreshFollowSlot();
+                    break;
+
+                case SwarmState.Follow:
+                    // 重新分配槽位
+                    RefreshFollowSlot();
+                    break;
+
+                case SwarmState.Frenzy:
+                    // 结束冲刺，切换到 Return
+                    m_rushRemainingTime = 0f;
+                    RemoveRushVisual();
+                    m_swarmState = SwarmState.Return;
+                    RefreshFollowSlot();
+                    break;
+            }
+
+            // 紧急传送：仅在极端条件下（连续卡住 5s+、距玩家 >18m、不在摄像机视野内）
+            if (m_consecutiveStuckCount >= 5)
+            {
+                TryEmergencyTeleportIfSafe(currentPos);
+            }
+        }
+
+        /// <summary>
+        /// 紧急传送：仅在僵尸不在摄像机视野内、距玩家超过 18m 时才允许。
+        /// 避免玩家看到僵尸瞬移。
+        /// </summary>
+        private void TryEmergencyTeleportIfSafe(Vector2 currentPos)
+        {
+            if (m_playerTransform == null) return;
+
+            float elapsed = Time.time;
+            if (elapsed - m_lastTeleportTime < TeleportCooldown) return;
+
+            Vector2 playerPos = new Vector2(m_playerTransform.position.x, m_playerTransform.position.y);
+            float distToPlayer = (currentPos - playerPos).magnitude;
+
+            // 条件 1：距玩家超过 18m
+            if (distToPlayer < 18f)
+            {
+                TotalVisibleTeleportBlockedCount++;
+                return;
+            }
+
+            // 条件 2：不在摄像机视野内
+            Camera cam = Camera.main;
+            if (cam != null)
+            {
+                Vector3 viewportPos = cam.WorldToViewportPoint(new Vector3(currentPos.x, currentPos.y, 0f));
+                bool inView = viewportPos.x >= -0.1f && viewportPos.x <= 1.1f &&
+                              viewportPos.y >= -0.1f && viewportPos.y <= 1.1f &&
+                              viewportPos.z > 0f;
+                if (inView)
+                {
+                    TotalVisibleTeleportBlockedCount++;
+                    return;
+                }
+            }
+
+            // 执行传送
+            MapRuntimeController map = ResolveMapRuntimeController();
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
+                float dist = UnityEngine.Random.Range(FollowMinRadius, FollowMaxRadius);
+                Vector2 candidate = playerPos + new Vector2(Mathf.Cos(angle) * dist, Mathf.Sin(angle) * dist);
+
+                if (map != null)
+                {
+                    candidate = map.ClampToMap(candidate, m_blockerClearance);
+                    if (map.IsPointBlocked(candidate, m_blockerClearance)) continue;
+                }
+
+                ApplyWorldPosition(candidate);
+                m_swarmState = SwarmState.Follow;
+                m_followSlotOffset = candidate - playerPos;
+                m_consecutiveStuckCount = 0;
+                m_lastTeleportTime = elapsed;
+                TotalEmergencyTeleportCount++;
+                return;
+            }
+
+            // 所有尝试失败，不传送，等下一次
+            TotalVisibleTeleportBlockedCount++;
+        }
+
+        /// <summary>全局：因在视野内而被阻止传送的次数（供 Debug）</summary>
+        public static int TotalVisibleTeleportBlockedCount { get; private set; }
+
+        private void OnDisable()
+        {
+            // 对象池回收时释放 Hunter 名额
+            UnregisterHunter();
         }
 
         // ==================== 内部辅助 ====================
@@ -424,6 +831,7 @@ namespace Game.Gameplay.Zombie
             Vector2 clampedCurrent = map.ClampToMap(currentPosition, clearance);
             Vector2 clampedTarget = map.ClampToMap(targetPosition, clearance);
 
+            // 直线移动
             if (!map.IsPointBlocked(clampedTarget, clearance) &&
                 map.HasDirectPath(clampedCurrent, clampedTarget, clearance))
             {
@@ -431,6 +839,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
+            // X 轴分量
             Vector2 xOnlyTarget = map.ClampToMap(new Vector2(currentPosition.x + displacement.x, currentPosition.y), clearance);
             if (!map.IsPointBlocked(xOnlyTarget, clearance) &&
                 map.HasDirectPath(clampedCurrent, xOnlyTarget, clearance))
@@ -439,6 +848,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
+            // Y 轴分量
             Vector2 yOnlyTarget = map.ClampToMap(new Vector2(currentPosition.x, currentPosition.y + displacement.y), clearance);
             if (!map.IsPointBlocked(yOnlyTarget, clearance) &&
                 map.HasDirectPath(clampedCurrent, yOnlyTarget, clearance))
@@ -447,6 +857,32 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
+            // 侧向脱困：尝试垂直于移动方向的左右偏移
+            float mag = displacement.magnitude;
+            if (mag > Mathf.Epsilon)
+            {
+                Vector2 perpendicular = new Vector2(-displacement.y, displacement.x).normalized * mag * 0.7f;
+
+                // 尝试左偏
+                Vector2 leftTarget = map.ClampToMap(currentPosition + perpendicular, clearance);
+                if (!map.IsPointBlocked(leftTarget, clearance) &&
+                    map.HasDirectPath(clampedCurrent, leftTarget, clearance))
+                {
+                    ApplyWorldPosition(leftTarget);
+                    return;
+                }
+
+                // 尝试右偏
+                Vector2 rightTarget = map.ClampToMap(currentPosition - perpendicular, clearance);
+                if (!map.IsPointBlocked(rightTarget, clearance) &&
+                    map.HasDirectPath(clampedCurrent, rightTarget, clearance))
+                {
+                    ApplyWorldPosition(rightTarget);
+                    return;
+                }
+            }
+
+            // 所有方向都被阻挡，保持原位（等待卡住检测重分配目标）
             ApplyWorldPosition(clampedCurrent);
         }
 

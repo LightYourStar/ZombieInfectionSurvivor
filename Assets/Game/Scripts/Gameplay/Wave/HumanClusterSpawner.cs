@@ -232,6 +232,9 @@ namespace Game.Gameplay.Wave
         /// <summary>严格断流保底：本局触发次数</summary>
         private int m_strictFallbackCount;
 
+        /// <summary>本局安全刷怪失败次数（所有尝试都不安全时的退化计数）</summary>
+        private int m_safeSpawnFailCount;
+
         [SerializeField] private List<HotspotDebugStats> m_hotspotDebugStats = new List<HotspotDebugStats>();
         private readonly Dictionary<SpawnHotspot, HotspotDebugStats> m_hotspotStatsByHotspot = new Dictionary<SpawnHotspot, HotspotDebugStats>();
 
@@ -290,6 +293,9 @@ namespace Game.Gameplay.Wave
 
         /// <summary>本局严格断流保底触发次数</summary>
         public int StrictFallbackCount => m_strictFallbackCount;
+
+        /// <summary>本局安全刷怪失败次数</summary>
+        public int SafeSpawnFailCount => m_safeSpawnFailCount;
         public InfectionFlowState CurrentFlowState => GetCurrentFlowState();
         public bool RecentFlowTopUpTriggered => m_recentFlowTopUpTriggered;
         public string LastSpawnSourceText => m_lastSpawnSourceText;
@@ -477,6 +483,7 @@ namespace Game.Gameplay.Wave
             m_lastNearbyFallbackElapsedTime = -999f;
             m_lastStrictFallbackTime = -999f;
             m_strictFallbackCount = 0;
+            m_safeSpawnFailCount = 0;
             ResetHotspotDebugStats();
             RefreshHotspots();
         }
@@ -1163,6 +1170,9 @@ namespace Game.Gameplay.Wave
 
                 human.transform.position = new Vector3(spawnPos.x, spawnPos.y, 0f);
 
+                // 设置生成保护时间，防止同帧生成同帧感染
+                human.SetSpawnGrace(0.3f);
+
                 // 为取出的 Human 注入 AI 依赖
                 HumanAI ai = human.GetComponent<HumanAI>();
                 if (ai != null)
@@ -1342,37 +1352,78 @@ namespace Game.Gameplay.Wave
 
         private Vector2 GetSafePositionInCluster(Vector2 center, float radius)
         {
-            Vector2 spawnPos = center;
-            for (int attempt = 0; attempt < 8; attempt++)
+            Vector2 playerPos = m_playerTransform != null
+                ? new Vector2(m_playerTransform.position.x, m_playerTransform.position.y)
+                : new Vector2(float.MaxValue, float.MaxValue);
+
+            // 安全距离：玩家感染半径 + 缓冲
+            float playerSafeDist = (m_config != null ? m_config.PlayerBaseInfectionRadius : 1.5f) + 2f;
+            float playerSafeDistSqr = playerSafeDist * playerSafeDist;
+
+            // 安全距离：僵尸感染半径 + 缓冲
+            float zombieSafeDist = (m_config != null ? m_config.BaseInfectionRadius : 1.5f) + 1.5f;
+            float zombieSafeDistSqr = zombieSafeDist * zombieSafeDist;
+
+            Vector2 bestPos = center;
+            bool foundSafe = false;
+
+            for (int attempt = 0; attempt < 20; attempt++)
             {
-                spawnPos = GetPositionInCluster(center, radius);
+                Vector2 candidate = GetPositionInCluster(center, radius);
+
+                // 地图阻挡检查
                 if (m_mapRuntimeController != null)
                 {
-                    spawnPos = m_mapRuntimeController.ClampToMap(spawnPos, 0.35f);
-                    if (m_mapRuntimeController.IsPointBlocked(spawnPos, 0.35f))
+                    candidate = m_mapRuntimeController.ClampToMap(candidate, 0.35f);
+                    if (m_mapRuntimeController.IsPointBlocked(candidate, 0.35f))
                     {
                         continue;
                     }
                 }
                 else if (m_spawnSystem != null)
                 {
-                    spawnPos = m_spawnSystem.ClampToMap(spawnPos);
+                    candidate = m_spawnSystem.ClampToMap(candidate);
                 }
 
-                return spawnPos;
+                // 玩家距离检查
+                if ((candidate - playerPos).sqrMagnitude < playerSafeDistSqr)
+                {
+                    // 记录为备选（比完全失败好）
+                    bestPos = candidate;
+                    continue;
+                }
+
+                // 僵尸距离检查（检查所有活跃僵尸）
+                bool tooCloseToZombie = false;
+                if (m_getZombiePositions != null)
+                {
+                    IReadOnlyList<Vector2> zombiePositions = m_getZombiePositions();
+                    if (zombiePositions != null)
+                    {
+                        for (int z = 0; z < zombiePositions.Count; z++)
+                        {
+                            if ((candidate - zombiePositions[z]).sqrMagnitude < zombieSafeDistSqr)
+                            {
+                                tooCloseToZombie = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (tooCloseToZombie)
+                {
+                    bestPos = candidate;
+                    continue;
+                }
+
+                // 通过所有检查
+                return candidate;
             }
 
-            WarnPlacementFallback("[HumanClusterSpawner] 簇内位置多次落入阻挡，使用中心点附近退化位置");
-            if (m_mapRuntimeController != null)
-            {
-                return m_mapRuntimeController.ClampToMap(center, 0.35f);
-            }
-            if (m_spawnSystem != null)
-            {
-                return m_spawnSystem.ClampToMap(center);
-            }
-
-            return spawnPos;
+            // 所有尝试都失败，使用最佳备选
+            m_safeSpawnFailCount++;
+            return bestPos;
         }
 
         // ==================== 辅助方法 ====================

@@ -339,8 +339,10 @@ namespace Game.Core
             }
 
             // 5. 感染判定（检测距离并执行转化）
+            // 5. 感染判定（检测距离并执行转化）
             if (m_infectionSystem != null)
             {
+                m_infectionSystem.UpdateElapsedTime(deltaTime);
                 m_infectionSystem.UpdateInfectionCheck();
             }
 
@@ -432,6 +434,7 @@ namespace Game.Core
             {
                 m_infectionSystem.Reset();
             }
+            Game.Gameplay.Zombie.ZombieCompanionAI.ResetGlobalDebugCounters();
             if (m_experienceSystem != null)
             {
                 m_experienceSystem.Reset();

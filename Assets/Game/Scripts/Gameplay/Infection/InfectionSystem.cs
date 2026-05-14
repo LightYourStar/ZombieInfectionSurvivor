@@ -84,6 +84,32 @@ namespace Game.Gameplay.Infection
 
         private MapRuntimeController m_cachedMapRuntimeController;
 
+        /// <summary>当前正在执行的感染来源，在 TryInfect 调用前设置</summary>
+        private InfectionSource m_currentInfectionSource = InfectionSource.Player;
+
+        // ==================== 感染来源统计 ====================
+
+        /// <summary>本局玩家直接感染次数</summary>
+        private int m_playerDirectInfections;
+
+        /// <summary>本局僵尸自动感染次数</summary>
+        private int m_zombieInfections;
+
+        /// <summary>本局普通爆发感染次数</summary>
+        private int m_burstInfections;
+
+        /// <summary>本局回响爆发感染次数</summary>
+        private int m_echoBurstInfections;
+
+        /// <summary>上次玩家直接感染的时间戳</summary>
+        private float m_lastPlayerDirectInfectionTime = -999f;
+
+        /// <summary>本局最长玩家未直接感染间隔</summary>
+        private float m_maxPlayerDirectInfectionGap;
+
+        /// <summary>本局已用时间（由外部通过 UpdateElapsedTime 更新）</summary>
+        private float m_elapsedTime;
+
         // ==================== 公开属性 ====================
 
         /// <summary>当前活跃 ZombieCompanion 数量</summary>
@@ -96,6 +122,20 @@ namespace Game.Gameplay.Infection
         public IReadOnlyList<ZombieCompanionUnit> ActiveZombies => m_activeZombies;
 
         public event Action<int> OnInfectionBurstResolved;
+
+        // ==================== 感染来源统计公开属性 ====================
+
+        public int PlayerDirectInfections => m_playerDirectInfections;
+        public int ZombieInfections => m_zombieInfections;
+        public int BurstInfections => m_burstInfections;
+        public int EchoBurstInfections => m_echoBurstInfections;
+        public float LastPlayerDirectInfectionTime => m_lastPlayerDirectInfectionTime;
+        public float MaxPlayerDirectInfectionGap => m_maxPlayerDirectInfectionGap;
+        public float ElapsedTime => m_elapsedTime;
+
+        /// <summary>距上次玩家直接感染的秒数</summary>
+        public float SecondsSincePlayerDirectInfection =>
+            m_lastPlayerDirectInfectionTime < 0f ? m_elapsedTime : (m_elapsedTime - m_lastPlayerDirectInfectionTime);
 
         // ==================== 初始化 ====================
 
@@ -190,6 +230,31 @@ namespace Game.Gameplay.Infection
             // 无论是否达到上限，感染成功都触发事件（给经验金币），保持割草爽感不中断
             GameEvents.RaiseInfectionSuccess(pos);
 
+            // 记录感染来源统计
+            switch (m_currentInfectionSource)
+            {
+                case InfectionSource.Player:
+                    m_playerDirectInfections++;
+                    float gap = m_lastPlayerDirectInfectionTime < 0f
+                        ? m_elapsedTime
+                        : (m_elapsedTime - m_lastPlayerDirectInfectionTime);
+                    if (gap > m_maxPlayerDirectInfectionGap)
+                    {
+                        m_maxPlayerDirectInfectionGap = gap;
+                    }
+                    m_lastPlayerDirectInfectionTime = m_elapsedTime;
+                    break;
+                case InfectionSource.Zombie:
+                    m_zombieInfections++;
+                    break;
+                case InfectionSource.InfectionBurst:
+                    m_burstInfections++;
+                    break;
+                case InfectionSource.EchoBurst:
+                    m_echoBurstInfections++;
+                    break;
+            }
+
             // 感染爆发：以感染点为中心做一次小范围二次感染检测（仅一层，不递归）
             if (!m_isBurstInProgress && m_config != null && m_config.EnableInfectionBurst)
             {
@@ -271,19 +336,24 @@ namespace Game.Gameplay.Infection
 
             m_pendingInfectionBuffer.Clear();
 
+            // 用于区分玩家直接感染和僵尸感染
+            int playerInfectionCount = 0;
+
             IReadOnlyList<HumanUnit> activeHumans = m_spawnSystem.ActiveHumans;
             for (int i = 0; i < activeHumans.Count; i++)
             {
                 HumanUnit human = activeHumans[i];
-                if (human == null || human.IsInfected)
+                if (human == null || human.IsInfected || human.IsInSpawnGrace)
                 {
                     continue;
                 }
 
-                // 玩家作为感染源（Requirement 5.1）
+                // 玩家作为感染源（Requirement 5.1）— 玩家感染优先入队
                 if (hasPlayer && IsInInfectionRange(human.Position, playerPos, radius))
                 {
-                    m_pendingInfectionBuffer.Add(human);
+                    // 插入到列表前部，保证 playerInfectionCount 准确
+                    m_pendingInfectionBuffer.Insert(playerInfectionCount, human);
+                    playerInfectionCount++;
                     continue;
                 }
 
@@ -303,9 +373,12 @@ namespace Game.Gameplay.Infection
                 }
             }
 
-            // 统一执行转化：TryInfect 内部自带上限校验，超限时会自动停止增加新单位
+            // 统一执行转化，前 playerInfectionCount 个标记为 Player 来源，其余为 Zombie 来源
             for (int i = 0; i < m_pendingInfectionBuffer.Count; i++)
             {
+                m_currentInfectionSource = (i < playerInfectionCount)
+                    ? InfectionSource.Player
+                    : InfectionSource.Zombie;
                 TryInfect(m_pendingInfectionBuffer[i]);
             }
             m_pendingInfectionBuffer.Clear();
@@ -431,6 +504,26 @@ namespace Game.Gameplay.Infection
             m_echoBurstBuffer.Clear();
             m_isBurstInProgress = false;
             m_isEchoBurstInProgress = false;
+
+            // 重置感染来源统计
+            m_playerDirectInfections = 0;
+            m_zombieInfections = 0;
+            m_burstInfections = 0;
+            m_echoBurstInfections = 0;
+            m_lastPlayerDirectInfectionTime = -999f;
+            m_maxPlayerDirectInfectionGap = 0f;
+            m_elapsedTime = 0f;
+        }
+
+        /// <summary>
+        /// 由 GameSystemRunner 每帧调用，更新已用时间用于统计间隔。
+        /// </summary>
+        public void UpdateElapsedTime(float deltaTime)
+        {
+            if (deltaTime > 0f)
+            {
+                m_elapsedTime += deltaTime;
+            }
         }
 
         // ==================== 内部辅助 ====================
@@ -490,6 +583,7 @@ namespace Game.Gameplay.Infection
             // 标记爆发进行中，防止递归
             int actualInfectedCount = 0;
             m_isBurstInProgress = true;
+            m_currentInfectionSource = InfectionSource.InfectionBurst;
 
             try
             {
@@ -570,6 +664,7 @@ namespace Game.Gameplay.Infection
             // - m_isBurstInProgress：防止 Echo 触发的感染再触发普通 Burst（收紧影响范围）
             m_isEchoBurstInProgress = true;
             m_isBurstInProgress = true;
+            m_currentInfectionSource = InfectionSource.EchoBurst;
             try
             {
                 for (int i = 0; i < m_echoBurstBuffer.Count; i++)

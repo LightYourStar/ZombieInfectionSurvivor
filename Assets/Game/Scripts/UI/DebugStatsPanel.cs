@@ -6,6 +6,7 @@ using Game.Gameplay.Infection;
 using Game.Gameplay.Player;
 using Game.Gameplay.Skill;
 using Game.Gameplay.Wave;
+using Game.Gameplay.Zombie;
 using UnityEngine;
 
 namespace Game.UI
@@ -151,7 +152,7 @@ namespace Game.UI
             float lineHeight = 20f;
 
             // ===== 实时统计区 =====
-            int liveLineCount = 14;
+            int liveLineCount = 18;
             GUI.Box(new Rect(x - 6f, y - 6f, width + 12f, lineHeight * liveLineCount + 16f), string.Empty);
 
             GUI.Label(new Rect(x, y, width, lineHeight), "=== DEBUG STATS (F3) ===", m_headerStyle);
@@ -189,6 +190,19 @@ namespace Game.UI
             y += lineHeight;
 
             GUI.Label(new Rect(x, y, width, lineHeight), $"当前属性: {BuildPlayerStatsText()}", m_labelStyle);
+            y += lineHeight;
+
+            // 感染来源统计
+            GUI.Label(new Rect(x, y, width, lineHeight), $"感染来源: {BuildInfectionSourceText()}", m_labelStyle);
+            y += lineHeight;
+
+            GUI.Label(new Rect(x, y, width, lineHeight), $"主角感染间隔: 距上次 {GetPlayerDirectGapText()} / 最长 {GetMaxPlayerDirectGapText()}", m_labelStyle);
+            y += lineHeight;
+
+            GUI.Label(new Rect(x, y, width, lineHeight), $"尸潮: {BuildSwarmStateText()}", m_labelStyle);
+            y += lineHeight;
+
+            GUI.Label(new Rect(x, y, width, lineHeight), $"卡住: Stuck:{CountStuckZombies()} 恢复:{ZombieCompanionAI.TotalStuckRecoveryCount} 槽位:{ZombieCompanionAI.TotalReassignedSlotCount} 传送:{ZombieCompanionAI.TotalEmergencyTeleportCount} 拒传:{ZombieCompanionAI.TotalVisibleTeleportBlockedCount}", m_labelStyle);
             y += lineHeight;
 
             GUI.Label(new Rect(x, y, width, lineHeight), $"断流计时: 距上次感染 {GetSecondsSinceLastInfectionText()}", m_labelStyle);
@@ -507,6 +521,66 @@ namespace Game.UI
             if (!condition) return;
             if (builder.Length > 0) builder.Append(" | ");
             builder.Append(text);
+        }
+
+        private string BuildInfectionSourceText()
+        {
+            if (m_infectionSystem == null) return "未绑定";
+            return $"主角{m_infectionSystem.PlayerDirectInfections} 僵尸{m_infectionSystem.ZombieInfections} 爆发{m_infectionSystem.BurstInfections} 回响{m_infectionSystem.EchoBurstInfections}";
+        }
+
+        private string BuildSwarmStateText()
+        {
+            if (m_infectionSystem == null) return "未绑定";
+
+            int follow = 0, hunt = 0, ret = 0, frenzy = 0;
+            var zombies = m_infectionSystem.ActiveZombies;
+            for (int i = 0; i < zombies.Count; i++)
+            {
+                var zombie = zombies[i];
+                if (zombie == null) continue;
+                var ai = zombie.GetComponent<ZombieCompanionAI>();
+                if (ai == null) continue;
+                switch (ai.CurrentSwarmState)
+                {
+                    case ZombieCompanionAI.SwarmState.Follow: follow++; break;
+                    case ZombieCompanionAI.SwarmState.Hunt: hunt++; break;
+                    case ZombieCompanionAI.SwarmState.Return: ret++; break;
+                    case ZombieCompanionAI.SwarmState.Frenzy: frenzy++; break;
+                }
+            }
+            return $"Follow:{follow} Hunt:{hunt} Return:{ret} Frenzy:{frenzy}";
+        }
+
+        private int CountStuckZombies()
+        {
+            if (m_infectionSystem == null) return 0;
+
+            int count = 0;
+            var zombies = m_infectionSystem.ActiveZombies;
+            for (int i = 0; i < zombies.Count; i++)
+            {
+                var zombie = zombies[i];
+                if (zombie == null) continue;
+                var ai = zombie.GetComponent<ZombieCompanionAI>();
+                if (ai != null && ai.IsStuck)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        private string GetPlayerDirectGapText()
+        {
+            if (m_infectionSystem == null) return "N/A";
+            return $"{m_infectionSystem.SecondsSincePlayerDirectInfection:F1}s";
+        }
+
+        private string GetMaxPlayerDirectGapText()
+        {
+            if (m_infectionSystem == null) return "N/A";
+            return $"{m_infectionSystem.MaxPlayerDirectInfectionGap:F1}s";
         }
 
         private void EnsureStyles()

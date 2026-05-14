@@ -99,6 +99,10 @@ namespace Game.UI
             GUI.Label(new Rect(x, y, width, lineHeight), $"本局补流次数: {fallbackCount}", m_labelStyle);
             y += lineHeight;
 
+            int safeFailCount = m_clusterSpawner != null ? m_clusterSpawner.SafeSpawnFailCount : 0;
+            GUI.Label(new Rect(x, y, width, lineHeight), $"安全刷怪失败: {safeFailCount}", m_labelStyle);
+            y += lineHeight;
+
             GUI.Label(new Rect(x, y, width, lineHeight), $"Final Frenzy: {GetFinalFrenzyText()}", m_labelStyle);
             y += lineHeight;
 

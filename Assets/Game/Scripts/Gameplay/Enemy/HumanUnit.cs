@@ -37,11 +37,17 @@ namespace Game.Gameplay.Enemy
         /// <summary>当前行为状态；私有 set 保证仅能通过本组件公开方法变更，避免外部随意写坏状态</summary>
         private HumanState m_currentState = HumanState.Wandering;
 
+        /// <summary>生成保护时间剩余（秒），> 0 时不参与感染判定</summary>
+        private float m_spawnGraceRemaining;
+
         /// <summary>当前行为状态。</summary>
         public HumanState CurrentState => m_currentState;
 
         /// <summary>是否已被标记为感染。便于外部在不关心具体枚举的场景下快速判断。</summary>
         public bool IsInfected => m_currentState == HumanState.Infected;
+
+        /// <summary>是否处于生成保护期，保护期内不参与感染判定</summary>
+        public bool IsInSpawnGrace => m_spawnGraceRemaining > 0f;
 
         /// <summary>
         /// 人类当前的 2D 世界坐标。
@@ -77,6 +83,28 @@ namespace Game.Gameplay.Enemy
         public void ResetState()
         {
             m_currentState = HumanState.Wandering;
+            m_spawnGraceRemaining = 0f;
+        }
+
+        /// <summary>
+        /// 设置生成保护时间。在保护期内不参与感染判定。
+        /// 由 HumanClusterSpawner 在生成后调用。
+        /// </summary>
+        public void SetSpawnGrace(float duration)
+        {
+            m_spawnGraceRemaining = Mathf.Max(0f, duration);
+        }
+
+        /// <summary>
+        /// 每帧递减保护时间。由 SpawnSystem.UpdateHumanAIs 或外部统一调度。
+        /// 也可以在 Update 中自行递减（因为 HumanUnit 不订阅 Update，这里用 LateUpdate 兜底）。
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (m_spawnGraceRemaining > 0f)
+            {
+                m_spawnGraceRemaining -= Time.deltaTime;
+            }
         }
 
         /// <summary>

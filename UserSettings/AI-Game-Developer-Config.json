@@ -213,6 +213,10 @@
       "enabled": false
     },
     {
+      "name": "screenshot-isolated",
+      "enabled": true
+    },
+    {
       "name": "screenshot-scene-view",
       "enabled": false
     },

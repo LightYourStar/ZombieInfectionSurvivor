@@ -241,7 +241,7 @@ namespace Game.Gameplay.Wave
                 }
 
                 // 选择满足约束的簇中心位置：距玩家 >= 8，与已有簇中心距离 >= 5
-                Vector2 center = PickClusterCenter(m_periodicSpawnMinDistFromPlayer, m_clusterMinSeparation);
+                Vector2 center = PickClusterCenter(GetCurrentSpawnMinDistanceFromPlayer(), m_clusterMinSeparation);
 
                 // 生成簇
                 SpawnCluster(center, clusterSize);
@@ -273,7 +273,7 @@ namespace Game.Gameplay.Wave
                 int burstSize = UnityEngine.Random.Range(
                     m_config.FinalFrenzyLargeClusterMin,
                     m_config.FinalFrenzyLargeClusterMax + 1);
-                Vector2 center = PickClusterCenter(m_periodicSpawnMinDistFromPlayer, m_clusterMinSeparation);
+                Vector2 center = PickClusterCenter(GetCurrentSpawnMinDistanceFromPlayer(), m_clusterMinSeparation);
                 StartCoroutine(StaggeredSpawnCluster(center, burstSize));
             }
         }
@@ -562,6 +562,16 @@ namespace Game.Gameplay.Wave
             }
 
             return m_config.HumanMaxCount;
+        }
+
+        private float GetCurrentSpawnMinDistanceFromPlayer()
+        {
+            if (!m_isFinalFrenzy)
+            {
+                return m_periodicSpawnMinDistFromPlayer;
+            }
+
+            return Mathf.Max(5.5f, m_periodicSpawnMinDistFromPlayer * 0.8f);
         }
 
         /// <summary>

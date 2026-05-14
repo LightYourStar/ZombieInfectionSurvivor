@@ -134,13 +134,13 @@ namespace Game.Gameplay.Skill
         /// <summary>获取当前局修正后的新生僵尸冲刺时间</summary>
         public float GetNewbornRushDuration(float baseValue)
         {
-            return baseValue + 0.35f * NewbornRushDurationUpStacks;
+            return baseValue + 0.25f * NewbornRushDurationUpStacks;
         }
 
         /// <summary>获取当前局修正后的僵尸感知范围</summary>
         public float GetZombiePerceptionRadius(float baseValue)
         {
-            return baseValue * (1f + 0.25f * ZombiePerceptionUpStacks);
+            return baseValue * (1f + 0.2f * ZombiePerceptionUpStacks);
         }
 
         /// <summary>获取当前局修正后的最终狂潮触发剩余时间</summary>

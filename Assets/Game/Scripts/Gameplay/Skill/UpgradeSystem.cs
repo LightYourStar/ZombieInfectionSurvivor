@@ -197,13 +197,13 @@ namespace Game.Gameplay.Skill
 
             m_availableOptions.Add(new UpgradeOption(
                 UpgradeType.NewbornRushDurationUp,
-                0.35f,
-                "新生狂奔：冲刺时间 +0.35s"));
+                0.25f,
+                "新生狂奔：冲刺时间 +0.25s"));
 
             m_availableOptions.Add(new UpgradeOption(
                 UpgradeType.ZombiePerceptionUp,
-                0.25f,
-                "尸群嗅觉：感知范围 +25%"));
+                0.2f,
+                "尸群嗅觉：感知范围 +20%"));
 
             m_availableOptions.Add(new UpgradeOption(
                 UpgradeType.FinalFrenzyEarly,

@@ -20,7 +20,7 @@ MonoBehaviour:
   m_humanInitialCount: 20
   m_humanSpawnInterval: 1
   m_zombieCompanionSpeed: 3.2
-  m_zombieCompanionPerceptionRadius: 3.75
+  m_zombieCompanionPerceptionRadius: 4.15
   m_zombieCompanionMaxCount: 60
   m_baseInfectionRadius: 1.5
   m_expPerInfection: 5
@@ -42,8 +42,8 @@ MonoBehaviour:
   m_infectionBurstRadius: 0.7
   m_infectionBurstMaxTargets: 1
   m_enableNewbornRush: 1
-  m_newbornRushDuration: 0.25
-  m_newbornRushSpeedMultiplier: 1.25
+  m_newbornRushDuration: 0.35
+  m_newbornRushSpeedMultiplier: 1.3
   m_enableFinalFrenzy: 1
   m_finalFrenzyStartRemainingTime: 30
   m_finalFrenzyClusterSpawnInterval: 1

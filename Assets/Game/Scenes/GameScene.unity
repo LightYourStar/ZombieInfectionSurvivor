@@ -4365,12 +4365,12 @@ MonoBehaviour:
   m_smallClusterMax: 5
   m_mediumClusterMin: 8
   m_mediumClusterMax: 12
-  m_clusterSpawnInterval: 3
-  m_clusterMinSeparation: 5
+  m_clusterSpawnInterval: 2.8
+  m_clusterMinSeparation: 4.5
   m_initialSpawnMinDist: 3
   m_initialSpawnMaxDist: 8
-  m_periodicSpawnMinDistFromPlayer: 8
-  m_clusterRadius: 2
+  m_periodicSpawnMinDistFromPlayer: 7.2
+  m_clusterRadius: 1.85
   m_maxPlacementAttempts: 30
 --- !u!114 &1540332640
 MonoBehaviour:

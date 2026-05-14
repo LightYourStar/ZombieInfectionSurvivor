@@ -528,7 +528,7 @@ namespace Game.Gameplay.Infection
                 baseRadius = m_sessionUpgradeState.GetBurstRadius(baseRadius);
             }
 
-            float echoRadius = baseRadius * 0.7f;
+            float echoRadius = baseRadius * 0.65f;
             int echoMaxTargets = 1;
 
             if (echoRadius <= 0f)

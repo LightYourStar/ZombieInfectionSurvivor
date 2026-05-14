@@ -571,7 +571,7 @@ namespace Game.Gameplay.Wave
                 return m_periodicSpawnMinDistFromPlayer;
             }
 
-            return Mathf.Max(5.5f, m_periodicSpawnMinDistFromPlayer * 0.8f);
+            return Mathf.Max(6f, m_periodicSpawnMinDistFromPlayer * 0.85f);
         }
 
         /// <summary>

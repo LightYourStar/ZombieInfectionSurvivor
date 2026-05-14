@@ -10,7 +10,7 @@ namespace Game.Gameplay.Skill
     {
         // ==================== 叠加计数 ====================
 
-        /// <summary>连锁强化叠加次数（最多 2）</summary>
+        /// <summary>连锁强化叠加次数（最多 1）</summary>
         public int ChainPlusOneStacks { get; private set; }
 
         /// <summary>扩散毒圈叠加次数（最多 2）</summary>
@@ -30,7 +30,7 @@ namespace Game.Gameplay.Skill
 
         // ==================== 最大叠加限制 ====================
 
-        public const int ChainPlusOneMaxStacks = 2;
+        public const int ChainPlusOneMaxStacks = 1;
         public const int BurstRadiusUpMaxStacks = 2;
         public const int NewbornRushDurationUpMaxStacks = 2;
         public const int ZombiePerceptionUpMaxStacks = 2;
@@ -146,7 +146,7 @@ namespace Game.Gameplay.Skill
         /// <summary>获取当前局修正后的最终狂潮触发剩余时间</summary>
         public float GetFinalFrenzyStartTime(float baseValue)
         {
-            return baseValue + 10f * FinalFrenzyEarlyStacks;
+            return baseValue + 8f * FinalFrenzyEarlyStacks;
         }
 
         /// <summary>是否启用回响爆发</summary>

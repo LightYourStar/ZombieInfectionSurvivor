@@ -207,8 +207,8 @@ namespace Game.Gameplay.Skill
 
             m_availableOptions.Add(new UpgradeOption(
                 UpgradeType.FinalFrenzyEarly,
-                10f,
-                "狂潮提前：末日狂潮提前 10s"));
+                8f,
+                "狂潮提前：末日狂潮提前 8s"));
 
             m_availableOptions.Add(new UpgradeOption(
                 UpgradeType.EchoBurst,

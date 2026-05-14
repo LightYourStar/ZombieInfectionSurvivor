@@ -248,13 +248,13 @@ namespace Game.Config
         [SerializeField] private float m_finalFrenzyStartRemainingTime = 30f;
 
         [Tooltip("末日狂潮期间的簇刷新间隔（秒）")]
-        [SerializeField] private float m_finalFrenzyClusterSpawnInterval = 1f;
+        [SerializeField] private float m_finalFrenzyClusterSpawnInterval = 1.1f;
 
         [Tooltip("末日狂潮大簇最少人数")]
-        [SerializeField] private int m_finalFrenzyLargeClusterMin = 10;
+        [SerializeField] private int m_finalFrenzyLargeClusterMin = 9;
 
         [Tooltip("末日狂潮大簇最多人数")]
-        [SerializeField] private int m_finalFrenzyLargeClusterMax = 14;
+        [SerializeField] private int m_finalFrenzyLargeClusterMax = 12;
 
         /// <summary>是否启用末日狂潮。</summary>
         public bool EnableFinalFrenzy => m_enableFinalFrenzy;
@@ -275,7 +275,7 @@ namespace Game.Config
         [SerializeField] private bool m_enableFinalFrenzyHumanCapOverride = true;
 
         [Tooltip("末日狂潮期间的人类数量上限")]
-        [SerializeField] private int m_finalFrenzyHumanMaxCount = 80;
+        [SerializeField] private int m_finalFrenzyHumanMaxCount = 74;
 
         /// <summary>末日狂潮期间是否临时提高人类上限。</summary>
         public bool EnableFinalFrenzyHumanCapOverride => m_enableFinalFrenzyHumanCapOverride;

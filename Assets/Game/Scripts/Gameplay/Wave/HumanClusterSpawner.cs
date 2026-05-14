@@ -8,6 +8,51 @@ using UnityEngine;
 
 namespace Game.Gameplay.Wave
 {
+    public enum InfectionFlowState
+    {
+        Normal,
+        LightBreak,
+        SevereBreak
+    }
+
+    [Serializable]
+    public sealed class HotspotDebugStats
+    {
+        [SerializeField] private string m_hotspotName;
+        [SerializeField] private int m_spawnCount;
+        [SerializeField] private int m_nearbyInfectionCount;
+
+        public string HotspotName => m_hotspotName;
+        public int SpawnCount => m_spawnCount;
+        public int NearbyInfectionCount => m_nearbyInfectionCount;
+
+        internal HotspotDebugStats(string hotspotName)
+        {
+            m_hotspotName = hotspotName;
+        }
+
+        internal void SetHotspotName(string hotspotName)
+        {
+            m_hotspotName = hotspotName;
+        }
+
+        internal void Reset()
+        {
+            m_spawnCount = 0;
+            m_nearbyInfectionCount = 0;
+        }
+
+        internal void RecordSpawn()
+        {
+            m_spawnCount++;
+        }
+
+        internal void RecordNearbyInfection()
+        {
+            m_nearbyInfectionCount++;
+        }
+    }
+
     /// <summary>
     /// 人群簇刷新系统。
     /// 按簇（SmallCluster 3-5 人、MediumCluster 8-12 人）生成人类，替代 SpawnSystem 的均匀随机刷新逻辑。
@@ -39,6 +84,9 @@ namespace Game.Gameplay.Wave
         [Tooltip("玩家 Transform，用于计算簇放置距离")]
         [SerializeField] private Transform m_playerTransform;
 
+        [Tooltip("地图运行时控制器，提供白盒阻挡查询")]
+        [SerializeField] private MapRuntimeController m_mapRuntimeController;
+
         [Header("热点配置")]
         [Tooltip("热点根节点，留空时会在场景中自动查找 SpawnHotspot")]
         [SerializeField] private Transform m_hotspotRoot;
@@ -48,6 +96,24 @@ namespace Game.Gameplay.Wave
 
         [Tooltip("末日狂潮期间对标记热点使用的权重倍率")]
         [SerializeField, Min(1f)] private float m_finalFrenzyHotspotWeightMultiplier = 3f;
+
+        [Tooltip("开局优先附近热点的持续时间")]
+        [SerializeField, Min(0f)] private float m_openingPriorityDuration = 30f;
+
+        [Tooltip("轻度断流阈值：超过该时间未感染时，下一波优先玩家附近热点")]
+        [SerializeField, Min(0f)] private float m_lightBreakThreshold = 3f;
+
+        [Tooltip("严重断流阈值：超过该时间未感染时，立即尝试玩家附近保底小簇")]
+        [SerializeField, Min(0f)] private float m_severeBreakThreshold = 5f;
+
+        [Tooltip("严重断流保底冷却，避免连续补流")]
+        [SerializeField, Min(0.5f)] private float m_flowTopUpCooldown = 4f;
+
+        [Tooltip("断流保底小簇距离玩家的最小距离")]
+        [SerializeField, Min(0f)] private float m_flowFallbackMinDistance = 5f;
+
+        [Tooltip("断流保底小簇距离玩家的最大距离")]
+        [SerializeField, Min(0f)] private float m_flowFallbackMaxDistance = 9f;
 
         // ==================== 簇配置参数 ====================
 
@@ -71,6 +137,18 @@ namespace Game.Gameplay.Wave
         [Tooltip("簇间最小中心距离")]
         [SerializeField] private float m_clusterMinSeparation = 5f;
 
+        [Tooltip("可感染 Human 低于该值时立即触发一次保底补充")]
+        [SerializeField, Min(0)] private int m_minAliveHumans = 20;
+
+        [Tooltip("可感染 Human 低于该值时提高常规刷新频率")]
+        [SerializeField, Min(0)] private int m_comfortAliveHumans = 40;
+
+        [Tooltip("可感染 Human 低于舒适值时，常规刷新间隔倍率")]
+        [SerializeField, Range(0.1f, 1f)] private float m_comfortIntervalMultiplier = 0.5f;
+
+        [Tooltip("低 Human 保底补充冷却，避免同一秒内连续补充多波")]
+        [SerializeField, Min(0.1f)] private float m_lowHumanTopUpCooldown = 1f;
+
         [Header("初始生成配置")]
         [Tooltip("初始簇距玩家最小距离")]
         [SerializeField] private float m_initialSpawnMinDist = 3f;
@@ -82,7 +160,25 @@ namespace Game.Gameplay.Wave
         [Tooltip("持续补充簇距玩家最小距离")]
         [SerializeField] private float m_periodicSpawnMinDistFromPlayer = 8f;
 
+        [Tooltip("玩家附近 Human 检测间隔")]
+        [SerializeField, Min(0.1f)] private float m_nearbyHumanCheckInterval = 1f;
+
+        [Tooltip("玩家附近可感染 Human 检测半径")]
+        [SerializeField, Min(1f)] private float m_nearbyHumanDetectionRadius = 12f;
+
+        [Tooltip("连续多少秒玩家附近没有 Human 时触发保底补充")]
+        [SerializeField, Min(1f)] private float m_noNearbyHumanThreshold = 5f;
+
+        [Tooltip("附近无 Human 保底优先使用的最近热点最大距离")]
+        [SerializeField, Min(1f)] private float m_nearbyFallbackHotspotMaxDistance = 18f;
+
+        [Tooltip("附近无 Human 保底冷却，避免连续补充")]
+        [SerializeField, Min(0.5f)] private float m_nearbyFallbackCooldown = 4f;
+
         [Header("调参")]
+        [Tooltip("Debug 调参用的人类上限覆盖。0 表示继续使用 GameConfig，不改变默认平衡")]
+        [SerializeField, Min(0)] private int m_maxAliveHumansOverride;
+
         [Tooltip("簇内人类分布半径")]
         [SerializeField, Min(0.5f)] private float m_clusterRadius = 2f;
 
@@ -108,6 +204,36 @@ namespace Game.Gameplay.Wave
 
         /// <summary>当前单局已进行时间，由 UpdateSpawn 推进</summary>
         private float m_elapsedTime;
+
+        /// <summary>最近一次感染发生的单局时间</summary>
+        private float m_lastInfectionElapsedTime;
+
+        /// <summary>最近一次严重断流保底触发时间</summary>
+        private float m_lastFlowTopUpElapsedTime = -999f;
+
+        private bool m_recentFlowTopUpTriggered;
+        private string m_lastSpawnSourceText = "未刷新";
+        private string m_lastSpawnDetailText = "无";
+        private string m_lastSpawnHotspotName = "无";
+        private Vector2 m_lastSpawnPosition;
+        private float m_nextPlacementWarningTime;
+        private float m_firstInfectionTime = -1f;
+        private float m_maxNoInfectionDuration;
+        private float m_lastSuccessfulSpawnElapsedTime = -1f;
+        private string m_lastGuaranteeSpawnReason = "无";
+        private float m_nearbyHumanCheckTimer;
+        private float m_noNearbyHumanDuration;
+        private float m_lastLowHumanTopUpElapsedTime = -999f;
+        private float m_lastNearbyFallbackElapsedTime = -999f;
+
+        /// <summary>严格断流保底：上次触发时间</summary>
+        private float m_lastStrictFallbackTime = -999f;
+
+        /// <summary>严格断流保底：本局触发次数</summary>
+        private int m_strictFallbackCount;
+
+        [SerializeField] private List<HotspotDebugStats> m_hotspotDebugStats = new List<HotspotDebugStats>();
+        private readonly Dictionary<SpawnHotspot, HotspotDebugStats> m_hotspotStatsByHotspot = new Dictionary<SpawnHotspot, HotspotDebugStats>();
 
         // ==================== 公开属性 ====================
 
@@ -143,6 +269,34 @@ namespace Game.Gameplay.Wave
 
         /// <summary>当前配置的人群热点列表</summary>
         public IReadOnlyList<SpawnHotspot> Hotspots => m_hotspots;
+        public IReadOnlyList<HotspotDebugStats> HotspotStats => m_hotspotDebugStats;
+
+        public float ElapsedTime => m_elapsedTime;
+        public bool IsFinalFrenzyActive => m_isFinalFrenzy && m_config != null && m_config.EnableFinalFrenzy;
+        public float SecondsUntilNextSpawn => GetSecondsUntilNextSpawn();
+        public int EnabledHotspotCount => CountEnabledHotspots();
+        public int CurrentAliveHumanCount => CountAliveHumans();
+        public int MinAliveHumans => m_minAliveHumans;
+        public int ComfortAliveHumans => m_comfortAliveHumans;
+        public int CurrentHumanMaxCount => GetCurrentHumanMaxCount();
+        public float FirstInfectionTime => m_firstInfectionTime;
+        public float MaxNoInfectionDuration => Mathf.Max(m_maxNoInfectionDuration, SecondsSinceLastInfection);
+        public float SecondsSinceLastInfection => Mathf.Max(0f, m_elapsedTime - m_lastInfectionElapsedTime);
+        public float SecondsSinceLastSuccessfulSpawn => m_lastSuccessfulSpawnElapsedTime >= 0f
+            ? Mathf.Max(0f, m_elapsedTime - m_lastSuccessfulSpawnElapsedTime)
+            : m_elapsedTime;
+        public string LastGuaranteeSpawnReason => m_lastGuaranteeSpawnReason;
+        public float NoNearbyHumanDuration => m_noNearbyHumanDuration;
+
+        /// <summary>本局严格断流保底触发次数</summary>
+        public int StrictFallbackCount => m_strictFallbackCount;
+        public InfectionFlowState CurrentFlowState => GetCurrentFlowState();
+        public bool RecentFlowTopUpTriggered => m_recentFlowTopUpTriggered;
+        public string LastSpawnSourceText => m_lastSpawnSourceText;
+        public string LastSpawnDetailText => m_lastSpawnDetailText;
+        public string LastSpawnHotspotName => m_lastSpawnHotspotName;
+        public Vector2 LastSpawnPosition => m_lastSpawnPosition;
+        public float FlowTopUpCooldownRemaining => Mathf.Max(0f, m_flowTopUpCooldown - (m_elapsedTime - m_lastFlowTopUpElapsedTime));
 
         // ==================== 初始化 ====================
 
@@ -154,9 +308,15 @@ namespace Game.Gameplay.Wave
         public void Initialize(Func<IReadOnlyList<Vector2>> getZombiePositions)
         {
             m_getZombiePositions = getZombiePositions;
+            if (m_mapRuntimeController == null)
+            {
+                m_mapRuntimeController = FindObjectOfType<MapRuntimeController>();
+            }
             RefreshHotspots();
 
             // 先取消再订阅，防止重复初始化导致重复订阅
+            Game.Core.GameEvents.OnInfectionSuccess -= HandleInfectionSuccess;
+            Game.Core.GameEvents.OnInfectionSuccess += HandleInfectionSuccess;
             Game.Core.GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
             Game.Core.GameEvents.OnFinalFrenzyStarted += HandleFinalFrenzyStarted;
         }
@@ -179,7 +339,7 @@ namespace Game.Gameplay.Wave
 
             for (int i = 0; i < clusterCount; i++)
             {
-                if (TrySpawnClusterFromHotspot(false))
+                if (TrySpawnClusterFromHotspot(false, true))
                 {
                     continue;
                 }
@@ -193,7 +353,11 @@ namespace Game.Gameplay.Wave
                 // 随机选择小簇大小 [3, 5]
                 int size = UnityEngine.Random.Range(m_smallClusterMin, m_smallClusterMax + 1);
 
-                SpawnCluster(center, size);
+                int spawnedCount = SpawnCluster(center, size);
+                if (spawnedCount > 0)
+                {
+                    RecordSpawn("随机回退", $"开局 {FormatPosition(center)}", center, null, "NormalInterval");
+                }
             }
         }
 
@@ -215,11 +379,17 @@ namespace Game.Gameplay.Wave
 
             m_elapsedTime += deltaTime;
             m_spawnTimer += deltaTime;
+            UpdateNearbyHumanMonitor(deltaTime);
+
+            // 唯一的断流保底：距上次感染 >= 5s 且附近无 Human 时才触发
+            TryStrictFlowFallback();
 
             // 末日狂潮期间使用更短的刷新间隔
-            float currentInterval = m_isFinalFrenzy && m_config.EnableFinalFrenzy
-                ? m_config.FinalFrenzyClusterSpawnInterval
-                : m_clusterSpawnInterval;
+            float currentInterval = GetCurrentSpawnInterval();
+            if (currentInterval <= 0f)
+            {
+                return;
+            }
 
             // 当累积时间达到间隔阈值时尝试生成
             while (m_spawnTimer >= currentInterval)
@@ -229,12 +399,12 @@ namespace Game.Gameplay.Wave
 
                 // 检查人类数量上限：达到上限时停止生成
                 int currentHumanCap = GetCurrentHumanMaxCount();
-                if (m_spawnSystem.ActiveHumanCount >= currentHumanCap)
+                if (CountAliveHumans() >= currentHumanCap)
                 {
                     break;
                 }
 
-                if (TrySpawnClusterFromHotspot(false))
+                if (TrySpawnClusterFromHotspot(false, IsFlowSupportPreferred(), "NormalInterval"))
                 {
                     continue;
                 }
@@ -272,7 +442,11 @@ namespace Game.Gameplay.Wave
                 Vector2 center = PickClusterCenter(GetCurrentSpawnMinDistanceFromPlayer(), m_clusterMinSeparation);
 
                 // 生成簇
-                SpawnCluster(center, clusterSize);
+                int spawnedCount = SpawnCluster(center, clusterSize);
+                if (spawnedCount > 0)
+                {
+                    RecordSpawn("随机回退", $"位置 {FormatPosition(center)}", center, null, "NormalInterval");
+                }
             }
         }
 
@@ -285,6 +459,25 @@ namespace Game.Gameplay.Wave
             m_spawnTimer = 0f;
             m_isFinalFrenzy = false;
             m_elapsedTime = 0f;
+            m_lastInfectionElapsedTime = 0f;
+            m_lastFlowTopUpElapsedTime = -999f;
+            m_recentFlowTopUpTriggered = false;
+            m_lastSpawnSourceText = "未刷新";
+            m_lastSpawnDetailText = "无";
+            m_lastSpawnHotspotName = "无";
+            m_lastSpawnPosition = Vector2.zero;
+            m_nextPlacementWarningTime = 0f;
+            m_firstInfectionTime = -1f;
+            m_maxNoInfectionDuration = 0f;
+            m_lastSuccessfulSpawnElapsedTime = -1f;
+            m_lastGuaranteeSpawnReason = "无";
+            m_nearbyHumanCheckTimer = 0f;
+            m_noNearbyHumanDuration = 0f;
+            m_lastLowHumanTopUpElapsedTime = -999f;
+            m_lastNearbyFallbackElapsedTime = -999f;
+            m_lastStrictFallbackTime = -999f;
+            m_strictFallbackCount = 0;
+            ResetHotspotDebugStats();
             RefreshHotspots();
         }
 
@@ -300,13 +493,14 @@ namespace Game.Gameplay.Wave
             // 分批刷出首波大簇，而不是同一帧全部创建
             if (ValidateDependencies() && m_playerTransform != null && m_config != null)
             {
-                if (!TrySpawnClusterFromHotspot(true))
+                if (!TrySpawnClusterFromHotspot(true, true))
                 {
                     int burstSize = UnityEngine.Random.Range(
                         m_config.FinalFrenzyLargeClusterMin,
                         m_config.FinalFrenzyLargeClusterMax + 1);
                     Vector2 center = PickClusterCenter(GetCurrentSpawnMinDistanceFromPlayer(), m_clusterMinSeparation);
                     StartCoroutine(StaggeredSpawnCluster(center, burstSize, m_clusterRadius));
+                    RecordSpawn("随机回退", $"狂潮首波 {FormatPosition(center)}", center, null, "NormalInterval");
                 }
             }
         }
@@ -345,21 +539,22 @@ namespace Game.Gameplay.Wave
 
         private void OnDestroy()
         {
+            Game.Core.GameEvents.OnInfectionSuccess -= HandleInfectionSuccess;
             Game.Core.GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
         }
 
         // ==================== 内部方法 ====================
 
-        private bool TrySpawnClusterFromHotspot(bool staggered)
+        private bool TrySpawnClusterFromHotspot(bool staggered, bool preferPlayerReachable, string reason = "NormalInterval")
         {
-            if (!TryPickHotspot(out SpawnHotspot hotspot))
+            if (!TryPickHotspot(preferPlayerReachable, out SpawnHotspot hotspot))
             {
                 return false;
             }
 
             int count = hotspot.GetRandomCount();
             int currentHumanCap = GetCurrentHumanMaxCount();
-            int remainingCapacity = Mathf.Max(0, currentHumanCap - m_spawnSystem.ActiveHumanCount);
+            int remainingCapacity = Mathf.Max(0, currentHumanCap - CountAliveHumans());
             if (remainingCapacity <= 0)
             {
                 return true;
@@ -368,6 +563,10 @@ namespace Game.Gameplay.Wave
             count = Mathf.Min(count, remainingCapacity);
             Vector2 center = hotspot.Position;
             float radius = hotspot.SpawnRadius;
+            if (m_mapRuntimeController != null)
+            {
+                center = m_mapRuntimeController.ClampToMap(center, 0.5f);
+            }
 
             if (staggered)
             {
@@ -378,15 +577,34 @@ namespace Game.Gameplay.Wave
                 SpawnCluster(center, count, radius);
             }
 
+            RecordHotspotSpawn(hotspot);
+            RecordSpawn("普通热点", hotspot.HotspotName, center, hotspot.HotspotName, reason);
             return true;
         }
 
-        private bool TryPickHotspot(out SpawnHotspot hotspot)
+        private bool TryPickHotspot(bool preferPlayerReachable, out SpawnHotspot hotspot)
         {
             RefreshHotspots();
 
             hotspot = null;
+            if (m_playerTransform == null)
+            {
+                return false;
+            }
+
             bool isFinalFrenzy = m_isFinalFrenzy && m_config != null && m_config.EnableFinalFrenzy;
+            bool strictDistance = preferPlayerReachable || m_elapsedTime <= m_openingPriorityDuration;
+            if (TryPickHotspotInternal(isFinalFrenzy, strictDistance, out hotspot))
+            {
+                return true;
+            }
+
+            return TryPickHotspotInternal(isFinalFrenzy, false, out hotspot);
+        }
+
+        private bool TryPickHotspotInternal(bool isFinalFrenzy, bool strictDistance, out SpawnHotspot hotspot)
+        {
+            hotspot = null;
             float totalWeight = 0f;
 
             for (int i = 0; i < m_hotspots.Count; i++)
@@ -397,7 +615,7 @@ namespace Game.Gameplay.Wave
                     continue;
                 }
 
-                totalWeight += candidate.GetEffectiveWeight(isFinalFrenzy, m_finalFrenzyHotspotWeightMultiplier);
+                totalWeight += GetHotspotWeight(candidate, isFinalFrenzy, strictDistance);
             }
 
             if (totalWeight <= 0f)
@@ -416,7 +634,7 @@ namespace Game.Gameplay.Wave
                     continue;
                 }
 
-                cursor += candidate.GetEffectiveWeight(isFinalFrenzy, m_finalFrenzyHotspotWeightMultiplier);
+                cursor += GetHotspotWeight(candidate, isFinalFrenzy, strictDistance);
                 if (roll <= cursor)
                 {
                     hotspot = candidate;
@@ -425,6 +643,437 @@ namespace Game.Gameplay.Wave
             }
 
             return false;
+        }
+
+        private float GetHotspotWeight(SpawnHotspot hotspot, bool isFinalFrenzy, bool strictDistance)
+        {
+            Vector2 playerPos = GetPlayerPosition();
+            Vector2 hotspotPos = hotspot.Position;
+            float distance = Vector2.Distance(playerPos, hotspotPos);
+
+            float weight = hotspot.GetEffectiveWeight(m_elapsedTime, isFinalFrenzy, m_finalFrenzyHotspotWeightMultiplier);
+            if (weight <= 0f)
+            {
+                return 0f;
+            }
+
+            float maxDistance = hotspot.RecommendedMaxPlayerDistance;
+            if (strictDistance && distance > maxDistance)
+            {
+                return 0f;
+            }
+
+            if (distance < hotspot.RecommendedMinPlayerDistance)
+            {
+                weight *= 0.45f;
+            }
+            else if (distance >= hotspot.RecommendedIdealMinPlayerDistance &&
+                     distance <= hotspot.RecommendedIdealMaxPlayerDistance)
+            {
+                weight *= 1.5f;
+            }
+            else if (distance > maxDistance)
+            {
+                weight *= isFinalFrenzy ? 0.35f : 0.12f;
+            }
+
+            if (m_elapsedTime <= m_openingPriorityDuration)
+            {
+                weight *= hotspot.IsOpeningPriority ? 3f : 0.45f;
+            }
+
+            InfectionFlowState flowState = GetCurrentFlowState();
+            if (flowState != InfectionFlowState.Normal)
+            {
+                weight *= hotspot.IsFlowFallback ? 3f : 0.55f;
+            }
+
+            if (m_mapRuntimeController != null)
+            {
+                bool centerBlocked = m_mapRuntimeController.IsPointBlocked(hotspotPos, 0.45f);
+                if (centerBlocked)
+                {
+                    return 0f;
+                }
+
+                bool hasDirectPath = m_mapRuntimeController.HasDirectPath(playerPos, hotspotPos, 0.25f);
+                if (!hasDirectPath)
+                {
+                    if (strictDistance)
+                    {
+                        return 0f;
+                    }
+
+                    weight *= 0.18f;
+                }
+            }
+
+            return Mathf.Max(0f, weight);
+        }
+
+        private void TryHandleLowHumanCount()
+        {
+            // [已禁用] 低人类存量补充逻辑已移除，不再因人类数量少而主动灌怪
+        }
+
+        private void TryHandleNoNearbyHumanFallback()
+        {
+            // [已禁用] 由 TryStrictFlowFallback 统一替代
+        }
+
+        private void TryHandleSevereFlowBreak()
+        {
+            // [已禁用] 由 TryStrictFlowFallback 统一替代
+        }
+
+        /// <summary>
+        /// 严格断流保底：仅在距上次感染 >= 5 秒且玩家附近无可感染 Human 时触发。
+        /// 冷却 8 秒，每次只补 3-5 人小簇。不会把人类数量拉回高位。
+        /// </summary>
+        private void TryStrictFlowFallback()
+        {
+            // 条件 1：距上次感染 >= 5 秒
+            if (m_noNearbyHumanDuration < m_noNearbyHumanThreshold)
+            {
+                return;
+            }
+
+            // 条件 2：冷却 8 秒
+            const float strictCooldown = 8f;
+            if (m_elapsedTime - m_lastStrictFallbackTime < strictCooldown)
+            {
+                return;
+            }
+
+            // 条件 3：玩家附近确实没有可感染 Human
+            if (CountNearbyAliveHumans(m_nearbyHumanDetectionRadius) > 0)
+            {
+                return;
+            }
+
+            // 补充 3-5 人小簇
+            int currentHumanCap = GetCurrentHumanMaxCount();
+            int remainingCapacity = Mathf.Max(0, currentHumanCap - CountAliveHumans());
+            if (remainingCapacity <= 0)
+            {
+                return;
+            }
+
+            int count = Mathf.Min(UnityEngine.Random.Range(3, 6), remainingCapacity);
+            bool handled = TrySpawnFromNearestEnabledHotspot("StrictFallback", count, m_nearbyFallbackHotspotMaxDistance);
+            if (!handled)
+            {
+                handled = TrySpawnNearPlayerEdge(count, "StrictFallback");
+            }
+
+            if (handled)
+            {
+                m_lastStrictFallbackTime = m_elapsedTime;
+                m_noNearbyHumanDuration = 0f;
+                m_strictFallbackCount++;
+                m_lastGuaranteeSpawnReason = "StrictFallback";
+            }
+        }
+
+        private bool TrySpawnFlowFallbackCluster(int count, string reason)
+        {
+            if (count <= 0)
+            {
+                return false;
+            }
+
+            if (!TryPickReachablePointNearPlayer(m_flowFallbackMinDistance, m_flowFallbackMaxDistance, out Vector2 center))
+            {
+                WarnPlacementFallback("[HumanClusterSpawner] 严重断流保底未找到直线可达位置，退回玩家附近随机点");
+                center = PickClusterCenterInRange(m_flowFallbackMinDistance, m_flowFallbackMaxDistance, 1f);
+            }
+
+            return SpawnClusterWithRecord(center, count, Mathf.Min(m_clusterRadius, 1.7f), "断流保底", $"小簇 {count} @ {FormatPosition(center)}", null, reason) > 0;
+        }
+
+        private bool TryRelocateExistingHumansForFlow()
+        {
+            IReadOnlyList<HumanUnit> humans = m_spawnSystem.ActiveHumans;
+            if (humans == null || humans.Count == 0)
+            {
+                return false;
+            }
+
+            if (!TryPickReachablePointNearPlayer(m_flowFallbackMinDistance, m_flowFallbackMaxDistance, out Vector2 center))
+            {
+                WarnPlacementFallback("[HumanClusterSpawner] 人类已满且未找到可搬运保底点，跳过本次断流保底");
+                return false;
+            }
+
+            int targetCount = Mathf.Min(UnityEngine.Random.Range(m_smallClusterMin, m_smallClusterMax + 1), humans.Count);
+            int movedCount = 0;
+
+            for (int i = 0; i < targetCount; i++)
+            {
+                HumanUnit human = FindFarthestHumanFromPlayer(humans);
+                if (human == null)
+                {
+                    break;
+                }
+
+                Vector2 spawnPos = GetPositionInCluster(center, Mathf.Min(m_clusterRadius, 1.7f));
+                if (m_mapRuntimeController != null)
+                {
+                    spawnPos = m_mapRuntimeController.ClampToMap(spawnPos, 0.45f);
+                }
+                else if (m_spawnSystem != null)
+                {
+                    spawnPos = m_spawnSystem.ClampToMap(spawnPos);
+                }
+
+                human.transform.position = new Vector3(spawnPos.x, spawnPos.y, human.transform.position.z);
+                movedCount++;
+            }
+
+            if (movedCount <= 0)
+            {
+                return false;
+            }
+
+            RecordSpawn("断流保底", $"搬运现有人类 {movedCount} @ {FormatPosition(center)}", center, null, "NoNearbyHuman");
+            return true;
+        }
+
+        private HumanUnit FindFarthestHumanFromPlayer(IReadOnlyList<HumanUnit> humans)
+        {
+            Vector2 playerPos = GetPlayerPosition();
+            HumanUnit best = null;
+            float bestSqrDistance = -1f;
+
+            for (int i = 0; i < humans.Count; i++)
+            {
+                HumanUnit human = humans[i];
+                if (human == null || human.IsInfected)
+                {
+                    continue;
+                }
+
+                float sqrDistance = (human.Position - playerPos).sqrMagnitude;
+                if (sqrDistance > bestSqrDistance)
+                {
+                    bestSqrDistance = sqrDistance;
+                    best = human;
+                }
+            }
+
+            return best;
+        }
+
+        private bool TryPickReachablePointNearPlayer(float minDistance, float maxDistance, out Vector2 point)
+        {
+            point = Vector2.zero;
+            Vector2 playerPos = GetPlayerPosition();
+            float minSqrDistance = minDistance * minDistance;
+            float maxSqrDistance = maxDistance * maxDistance;
+
+            for (int attempt = 0; attempt < m_maxPlacementAttempts; attempt++)
+            {
+                float angle = UnityEngine.Random.Range(0f, 2f * Mathf.PI);
+                float radius = Mathf.Sqrt(UnityEngine.Random.Range(minSqrDistance, maxSqrDistance));
+                Vector2 candidate = playerPos + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius;
+
+                if (m_mapRuntimeController != null)
+                {
+                    candidate = m_mapRuntimeController.ClampToMap(candidate, 0.45f);
+                    if (m_mapRuntimeController.IsPointBlocked(candidate, 0.45f))
+                    {
+                        continue;
+                    }
+                    if (!m_mapRuntimeController.HasDirectPath(playerPos, candidate, 0.25f))
+                    {
+                        continue;
+                    }
+                }
+                else if (m_spawnSystem != null)
+                {
+                    candidate = m_spawnSystem.ClampToMap(candidate);
+                }
+
+                bool tooCloseToCluster = false;
+                float minClusterSqrDistance = m_clusterMinSeparation * m_clusterMinSeparation * 0.5f;
+                for (int i = 0; i < m_clusterCenters.Count; i++)
+                {
+                    if ((candidate - m_clusterCenters[i]).sqrMagnitude < minClusterSqrDistance)
+                    {
+                        tooCloseToCluster = true;
+                        break;
+                    }
+                }
+
+                if (tooCloseToCluster)
+                {
+                    continue;
+                }
+
+                point = candidate;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TrySpawnFromNearestEnabledHotspot(string reason, int count, float maxDistance)
+        {
+            RefreshHotspots();
+
+            SpawnHotspot best = null;
+            float bestSqrDistance = float.MaxValue;
+            Vector2 playerPos = GetPlayerPosition();
+            float maxSqrDistance = maxDistance * maxDistance;
+
+            for (int i = 0; i < m_hotspots.Count; i++)
+            {
+                SpawnHotspot hotspot = m_hotspots[i];
+                if (hotspot == null || !hotspot.IsEnabledAt(m_elapsedTime))
+                {
+                    continue;
+                }
+
+                Vector2 hotspotPos = hotspot.Position;
+                float sqrDistance = (hotspotPos - playerPos).sqrMagnitude;
+                if (sqrDistance > maxSqrDistance || sqrDistance >= bestSqrDistance)
+                {
+                    continue;
+                }
+
+                if (m_mapRuntimeController != null)
+                {
+                    if (m_mapRuntimeController.IsPointBlocked(hotspotPos, 0.45f))
+                    {
+                        continue;
+                    }
+                    if (!m_mapRuntimeController.HasDirectPath(playerPos, hotspotPos, 0.25f) &&
+                        reason == "NoNearbyHuman")
+                    {
+                        continue;
+                    }
+                }
+
+                best = hotspot;
+                bestSqrDistance = sqrDistance;
+            }
+
+            if (best == null)
+            {
+                return false;
+            }
+
+            int spawned = SpawnClusterWithRecord(
+                best.Position,
+                count,
+                best.SpawnRadius,
+                "保底热点",
+                $"{best.HotspotName} x{count}",
+                best,
+                reason);
+            return spawned > 0;
+        }
+
+        private bool TrySpawnNearPlayerEdge(int count, string reason)
+        {
+            Vector2 center;
+            if (!TryPickForwardReachablePoint(out center) &&
+                !TryPickReachablePointNearPlayer(m_flowFallbackMinDistance, m_flowFallbackMaxDistance, out center))
+            {
+                center = PickClusterCenterInRange(m_flowFallbackMinDistance, m_flowFallbackMaxDistance, 1f);
+            }
+
+            int spawned = SpawnClusterWithRecord(
+                center,
+                count,
+                Mathf.Min(m_clusterRadius, 1.7f),
+                "保底近点",
+                $"玩家附近 {FormatPosition(center)}",
+                null,
+                reason);
+            return spawned > 0;
+        }
+
+        private bool TryPickForwardReachablePoint(out Vector2 point)
+        {
+            point = Vector2.zero;
+            if (m_playerTransform == null)
+            {
+                return false;
+            }
+
+            Vector2 playerPos = GetPlayerPosition();
+            Vector2 forward = m_playerTransform.up;
+            if (forward.sqrMagnitude < 0.01f)
+            {
+                forward = Vector2.up;
+            }
+            forward.Normalize();
+
+            for (int attempt = 0; attempt < m_maxPlacementAttempts; attempt++)
+            {
+                float angleOffset = UnityEngine.Random.Range(-45f, 45f);
+                float radians = angleOffset * Mathf.Deg2Rad;
+                float cos = Mathf.Cos(radians);
+                float sin = Mathf.Sin(radians);
+                Vector2 direction = new Vector2(
+                    forward.x * cos - forward.y * sin,
+                    forward.x * sin + forward.y * cos);
+                float distance = UnityEngine.Random.Range(m_flowFallbackMinDistance, m_flowFallbackMaxDistance);
+                Vector2 candidate = playerPos + direction * distance;
+
+                if (m_mapRuntimeController != null)
+                {
+                    candidate = m_mapRuntimeController.ClampToMap(candidate, 0.45f);
+                    if (m_mapRuntimeController.IsPointBlocked(candidate, 0.45f))
+                    {
+                        continue;
+                    }
+                    if (!m_mapRuntimeController.HasDirectPath(playerPos, candidate, 0.25f))
+                    {
+                        continue;
+                    }
+                }
+                else if (m_spawnSystem != null)
+                {
+                    candidate = m_spawnSystem.ClampToMap(candidate);
+                }
+
+                point = candidate;
+                return true;
+            }
+
+            return false;
+        }
+
+        private int SpawnClusterWithRecord(
+            Vector2 center,
+            int count,
+            float radius,
+            string source,
+            string detail,
+            SpawnHotspot hotspot,
+            string reason)
+        {
+            int remainingCapacity = Mathf.Max(0, GetCurrentHumanMaxCount() - CountAliveHumans());
+            int finalCount = Mathf.Min(count, remainingCapacity);
+            if (finalCount <= 0)
+            {
+                return 0;
+            }
+
+            int spawned = SpawnCluster(center, finalCount, radius);
+            if (spawned <= 0)
+            {
+                return 0;
+            }
+
+            if (hotspot != null)
+            {
+                RecordHotspotSpawn(hotspot);
+            }
+            RecordSpawn(source, detail, center, hotspot != null ? hotspot.HotspotName : null, reason);
+            return spawned;
         }
 
         private void RefreshHotspots()
@@ -454,19 +1103,19 @@ namespace Game.Gameplay.Wave
                 }
             }
 
-            if (m_hotspots.Count > 0)
+            if (m_hotspots.Count <= 0)
             {
-                return;
-            }
-
-            SpawnHotspot[] sceneHotspots = FindObjectsOfType<SpawnHotspot>(true);
-            for (int i = 0; i < sceneHotspots.Length; i++)
-            {
-                if (!m_hotspots.Contains(sceneHotspots[i]))
+                SpawnHotspot[] sceneHotspots = FindObjectsOfType<SpawnHotspot>(true);
+                for (int i = 0; i < sceneHotspots.Length; i++)
                 {
-                    m_hotspots.Add(sceneHotspots[i]);
+                    if (!m_hotspots.Contains(sceneHotspots[i]))
+                    {
+                        m_hotspots.Add(sceneHotspots[i]);
+                    }
                 }
             }
+
+            EnsureHotspotDebugStats();
         }
 
         /// <summary>
@@ -476,19 +1125,19 @@ namespace Game.Gameplay.Wave
         /// </summary>
         /// <param name="center">簇的中心位置（世界坐标 XY）</param>
         /// <param name="count">簇内人类数量</param>
-        internal void SpawnCluster(Vector2 center, int count)
+        internal int SpawnCluster(Vector2 center, int count)
         {
-            SpawnCluster(center, count, m_clusterRadius);
+            return SpawnCluster(center, count, m_clusterRadius);
         }
 
         /// <summary>
         /// 在指定中心位置和半径内生成一个人群簇。
         /// </summary>
-        internal void SpawnCluster(Vector2 center, int count, float radius)
+        internal int SpawnCluster(Vector2 center, int count, float radius)
         {
             if (!ValidateDependencies())
             {
-                return;
+                return 0;
             }
 
             int spawnedCount = 0;
@@ -498,7 +1147,7 @@ namespace Game.Gameplay.Wave
             {
                 // 检查是否已达到人类上限
                 if (m_config != null && m_spawnSystem != null &&
-                    m_spawnSystem.ActiveHumanCount >= GetCurrentHumanMaxCount())
+                    CountAliveHumans() >= GetCurrentHumanMaxCount())
                 {
                     break;
                 }
@@ -510,14 +1159,7 @@ namespace Game.Gameplay.Wave
                     break;
                 }
 
-                // 使用均匀圆盘分布计算簇内位置
-                Vector2 spawnPos = GetPositionInCluster(center, radius);
-
-                // 将位置钳制到地图范围内
-                if (m_spawnSystem != null)
-                {
-                    spawnPos = m_spawnSystem.ClampToMap(spawnPos);
-                }
+                Vector2 spawnPos = GetSafePositionInCluster(center, radius);
 
                 human.transform.position = new Vector3(spawnPos.x, spawnPos.y, 0f);
 
@@ -535,7 +1177,7 @@ namespace Game.Gameplay.Wave
 
             if (spawnedCount <= 0)
             {
-                return;
+                return 0;
             }
 
             // 记录簇中心位置，用于后续簇间距约束检查。
@@ -545,6 +1187,8 @@ namespace Game.Gameplay.Wave
             {
                 m_clusterCenters.RemoveAt(0);
             }
+
+            return spawnedCount;
         }
 
         /// <summary>
@@ -696,6 +1340,41 @@ namespace Game.Gameplay.Wave
             return new Vector2(center.x + offsetX, center.y + offsetY);
         }
 
+        private Vector2 GetSafePositionInCluster(Vector2 center, float radius)
+        {
+            Vector2 spawnPos = center;
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                spawnPos = GetPositionInCluster(center, radius);
+                if (m_mapRuntimeController != null)
+                {
+                    spawnPos = m_mapRuntimeController.ClampToMap(spawnPos, 0.35f);
+                    if (m_mapRuntimeController.IsPointBlocked(spawnPos, 0.35f))
+                    {
+                        continue;
+                    }
+                }
+                else if (m_spawnSystem != null)
+                {
+                    spawnPos = m_spawnSystem.ClampToMap(spawnPos);
+                }
+
+                return spawnPos;
+            }
+
+            WarnPlacementFallback("[HumanClusterSpawner] 簇内位置多次落入阻挡，使用中心点附近退化位置");
+            if (m_mapRuntimeController != null)
+            {
+                return m_mapRuntimeController.ClampToMap(center, 0.35f);
+            }
+            if (m_spawnSystem != null)
+            {
+                return m_spawnSystem.ClampToMap(center);
+            }
+
+            return spawnPos;
+        }
+
         // ==================== 辅助方法 ====================
 
         /// <summary>
@@ -720,17 +1399,135 @@ namespace Game.Gameplay.Wave
         /// </summary>
         private int GetCurrentHumanMaxCount()
         {
+            int configuredCap;
             if (m_config == null)
             {
-                return 50;
+                configuredCap = 50;
             }
-
-            if (m_isFinalFrenzy && m_config.EnableFinalFrenzyHumanCapOverride)
+            else if (m_isFinalFrenzy && m_config.EnableFinalFrenzyHumanCapOverride)
             {
-                return m_config.FinalFrenzyHumanMaxCount;
+                configuredCap = m_config.FinalFrenzyHumanMaxCount;
+            }
+            else
+            {
+                configuredCap = m_config.HumanMaxCount;
             }
 
-            return m_config.HumanMaxCount;
+            return m_maxAliveHumansOverride > 0 ? m_maxAliveHumansOverride : configuredCap;
+        }
+
+        private float GetCurrentSpawnInterval()
+        {
+            float interval;
+            if (m_isFinalFrenzy && m_config != null && m_config.EnableFinalFrenzy)
+            {
+                interval = m_config.FinalFrenzyClusterSpawnInterval;
+            }
+            else
+            {
+                interval = m_clusterSpawnInterval;
+            }
+
+            // 不再因人类数量少而加速刷怪
+            return Mathf.Max(0f, interval);
+        }
+
+        private float GetSecondsUntilNextSpawn()
+        {
+            float currentInterval = GetCurrentSpawnInterval();
+            if (currentInterval <= 0f)
+            {
+                return 0f;
+            }
+
+            return Mathf.Max(0f, currentInterval - m_spawnTimer);
+        }
+
+        private int CountEnabledHotspots()
+        {
+            int count = 0;
+            if (m_hotspots == null)
+            {
+                return count;
+            }
+
+            for (int i = 0; i < m_hotspots.Count; i++)
+            {
+                SpawnHotspot hotspot = m_hotspots[i];
+                if (hotspot != null && hotspot.IsEnabledAt(m_elapsedTime))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private int CountAliveHumans()
+        {
+            if (m_spawnSystem == null || m_spawnSystem.ActiveHumans == null)
+            {
+                return 0;
+            }
+
+            IReadOnlyList<HumanUnit> humans = m_spawnSystem.ActiveHumans;
+            int count = 0;
+            for (int i = 0; i < humans.Count; i++)
+            {
+                HumanUnit human = humans[i];
+                if (human != null && !human.IsInfected)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private int CountNearbyAliveHumans(float radius)
+        {
+            if (m_spawnSystem == null || m_spawnSystem.ActiveHumans == null || m_playerTransform == null)
+            {
+                return 0;
+            }
+
+            Vector2 playerPos = GetPlayerPosition();
+            float sqrRadius = radius * radius;
+            IReadOnlyList<HumanUnit> humans = m_spawnSystem.ActiveHumans;
+            int count = 0;
+
+            for (int i = 0; i < humans.Count; i++)
+            {
+                HumanUnit human = humans[i];
+                if (human == null || human.IsInfected)
+                {
+                    continue;
+                }
+
+                if ((human.Position - playerPos).sqrMagnitude <= sqrRadius)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private void UpdateNearbyHumanMonitor(float deltaTime)
+        {
+            m_nearbyHumanCheckTimer += deltaTime;
+            while (m_nearbyHumanCheckTimer >= m_nearbyHumanCheckInterval)
+            {
+                m_nearbyHumanCheckTimer -= m_nearbyHumanCheckInterval;
+                if (CountNearbyAliveHumans(m_nearbyHumanDetectionRadius) > 0)
+                {
+                    m_noNearbyHumanDuration = 0f;
+                }
+                else
+                {
+                    m_noNearbyHumanDuration += m_nearbyHumanCheckInterval;
+                }
+            }
         }
 
         private float GetCurrentSpawnMinDistanceFromPlayer()
@@ -741,6 +1538,202 @@ namespace Game.Gameplay.Wave
             }
 
             return Mathf.Max(6f, m_periodicSpawnMinDistFromPlayer * 0.85f);
+        }
+
+        private bool IsFlowSupportPreferred()
+        {
+            return m_elapsedTime <= m_openingPriorityDuration || GetCurrentFlowState() != InfectionFlowState.Normal;
+        }
+
+        private InfectionFlowState GetCurrentFlowState()
+        {
+            float seconds = SecondsSinceLastInfection;
+            if (seconds >= m_severeBreakThreshold)
+            {
+                return InfectionFlowState.SevereBreak;
+            }
+            if (seconds >= m_lightBreakThreshold)
+            {
+                return InfectionFlowState.LightBreak;
+            }
+
+            return InfectionFlowState.Normal;
+        }
+
+        private Vector2 GetPlayerPosition()
+        {
+            if (m_playerTransform == null)
+            {
+                return Vector2.zero;
+            }
+
+            Vector3 world = m_playerTransform.position;
+            return new Vector2(world.x, world.y);
+        }
+
+        private void HandleInfectionSuccess(Vector2 position)
+        {
+            float noInfectionDuration = Mathf.Max(0f, m_elapsedTime - m_lastInfectionElapsedTime);
+            if (noInfectionDuration > m_maxNoInfectionDuration)
+            {
+                m_maxNoInfectionDuration = noInfectionDuration;
+            }
+
+            if (m_firstInfectionTime < 0f)
+            {
+                m_firstInfectionTime = m_elapsedTime;
+            }
+
+            m_lastInfectionElapsedTime = m_elapsedTime;
+            RecordNearbyHotspotInfection(position);
+        }
+
+        private void RecordSpawn(string source, string detail, Vector2 position, string hotspotName = null, string reason = "NormalInterval")
+        {
+            m_lastSpawnSourceText = source;
+            m_lastSpawnDetailText = detail;
+            m_lastSpawnHotspotName = string.IsNullOrWhiteSpace(hotspotName) ? "无" : hotspotName;
+            m_lastSpawnPosition = position;
+            m_lastSuccessfulSpawnElapsedTime = m_elapsedTime;
+            m_lastGuaranteeSpawnReason = reason;
+        }
+
+        private void EnsureHotspotDebugStats()
+        {
+            if (m_hotspotDebugStats == null)
+            {
+                m_hotspotDebugStats = new List<HotspotDebugStats>();
+            }
+
+            m_hotspotStatsByHotspot.Clear();
+
+            for (int i = 0; i < m_hotspots.Count; i++)
+            {
+                SpawnHotspot hotspot = m_hotspots[i];
+                if (hotspot == null)
+                {
+                    continue;
+                }
+
+                HotspotDebugStats stats = FindHotspotStats(hotspot.HotspotName);
+                if (stats == null)
+                {
+                    stats = new HotspotDebugStats(hotspot.HotspotName);
+                    m_hotspotDebugStats.Add(stats);
+                }
+
+                stats.SetHotspotName(hotspot.HotspotName);
+                m_hotspotStatsByHotspot[hotspot] = stats;
+            }
+        }
+
+        private HotspotDebugStats FindHotspotStats(string hotspotName)
+        {
+            for (int i = 0; i < m_hotspotDebugStats.Count; i++)
+            {
+                HotspotDebugStats stats = m_hotspotDebugStats[i];
+                if (stats != null && stats.HotspotName == hotspotName)
+                {
+                    return stats;
+                }
+            }
+
+            return null;
+        }
+
+        private void ResetHotspotDebugStats()
+        {
+            if (m_hotspotDebugStats == null)
+            {
+                m_hotspotDebugStats = new List<HotspotDebugStats>();
+            }
+
+            for (int i = 0; i < m_hotspotDebugStats.Count; i++)
+            {
+                if (m_hotspotDebugStats[i] != null)
+                {
+                    m_hotspotDebugStats[i].Reset();
+                }
+            }
+        }
+
+        private void RecordHotspotSpawn(SpawnHotspot hotspot)
+        {
+            if (hotspot == null)
+            {
+                return;
+            }
+
+            if (!m_hotspotStatsByHotspot.TryGetValue(hotspot, out HotspotDebugStats stats))
+            {
+                EnsureHotspotDebugStats();
+                m_hotspotStatsByHotspot.TryGetValue(hotspot, out stats);
+            }
+
+            if (stats != null)
+            {
+                stats.RecordSpawn();
+            }
+        }
+
+        private void RecordNearbyHotspotInfection(Vector2 infectionPosition)
+        {
+            if (m_hotspots == null)
+            {
+                return;
+            }
+
+            SpawnHotspot nearestHotspot = null;
+            float nearestSqrDistance = float.MaxValue;
+
+            for (int i = 0; i < m_hotspots.Count; i++)
+            {
+                SpawnHotspot hotspot = m_hotspots[i];
+                if (hotspot == null)
+                {
+                    continue;
+                }
+
+                float allowedDistance = hotspot.SpawnRadius + 1.5f;
+                float sqrDistance = (hotspot.Position - infectionPosition).sqrMagnitude;
+                if (sqrDistance <= allowedDistance * allowedDistance && sqrDistance < nearestSqrDistance)
+                {
+                    nearestSqrDistance = sqrDistance;
+                    nearestHotspot = hotspot;
+                }
+            }
+
+            if (nearestHotspot == null)
+            {
+                return;
+            }
+
+            if (!m_hotspotStatsByHotspot.TryGetValue(nearestHotspot, out HotspotDebugStats stats))
+            {
+                EnsureHotspotDebugStats();
+                m_hotspotStatsByHotspot.TryGetValue(nearestHotspot, out stats);
+            }
+
+            if (stats != null)
+            {
+                stats.RecordNearbyInfection();
+            }
+        }
+
+        private static string FormatPosition(Vector2 position)
+        {
+            return $"({position.x:F1}, {position.y:F1})";
+        }
+
+        private void WarnPlacementFallback(string message)
+        {
+            if (m_elapsedTime < m_nextPlacementWarningTime)
+            {
+                return;
+            }
+
+            Debug.LogWarning(message);
+            m_nextPlacementWarningTime = m_elapsedTime + 5f;
         }
 
         /// <summary>

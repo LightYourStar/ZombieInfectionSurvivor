@@ -23,12 +23,10 @@ namespace Game.UI
         [SerializeField] private Camera m_camera;
         [SerializeField] private float m_shakeIntensity = 0.15f;
         [SerializeField] private float m_shakeDuration = 0.12f;
-        [SerializeField] private float m_shakeCooldown = 0.18f;
 
         private Coroutine m_comboFadeCoroutine;
-        private Coroutine m_shakeCoroutine;
         private Vector3 m_cameraOriginalPos;
-        private float m_nextShakeAllowedTime;
+        private Coroutine m_shakeCoroutine;
 
         private void Awake()
         {
@@ -139,18 +137,6 @@ namespace Game.UI
 
         private void HandleBurstEvent(int count)
         {
-            if (m_camera != null && Time.unscaledTime >= m_nextShakeAllowedTime)
-            {
-                if (m_shakeCoroutine != null)
-                {
-                    StopCoroutine(m_shakeCoroutine);
-                    m_camera.transform.position = m_cameraOriginalPos;
-                }
-
-                m_nextShakeAllowedTime = Time.unscaledTime + m_shakeCooldown;
-                m_shakeCoroutine = StartCoroutine(ScreenShake());
-            }
-
             ShowFloatingText($"BURST x{count}!", new Color(1f, 1f, 0.3f), 34);
         }
 
@@ -232,28 +218,14 @@ namespace Game.UI
             m_comboFadeCoroutine = null;
         }
 
+        /// <summary>
+        /// 屏幕震动已禁用：直接移动摄像机在 2D 俯视角中体验像卡顿而非震动。
+        /// 保留方法签名以备后续替换为更合适的反馈方式（如 UI 抖动或后处理）。
+        /// </summary>
         private IEnumerator ScreenShake()
         {
-            if (m_camera == null)
-            {
-                yield break;
-            }
-
-            m_cameraOriginalPos = m_camera.transform.position;
-            float elapsed = 0f;
-
-            while (elapsed < m_shakeDuration)
-            {
-                elapsed += Time.deltaTime;
-                float t = 1f - Mathf.Clamp01(elapsed / m_shakeDuration);
-                float offsetX = Random.Range(-m_shakeIntensity, m_shakeIntensity) * t;
-                float offsetY = Random.Range(-m_shakeIntensity, m_shakeIntensity) * t;
-                m_camera.transform.position = m_cameraOriginalPos + new Vector3(offsetX, offsetY, 0f);
-                yield return null;
-            }
-
-            m_camera.transform.position = m_cameraOriginalPos;
-            m_shakeCoroutine = null;
+            // [已禁用] 震屏在移动端 2D 俯视角中体验为卡顿，暂不启用
+            yield break;
         }
 
         private void EnsureComboText()

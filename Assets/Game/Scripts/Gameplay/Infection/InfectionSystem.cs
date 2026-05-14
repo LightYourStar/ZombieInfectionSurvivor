@@ -44,6 +44,8 @@ namespace Game.Gameplay.Infection
         [Tooltip("玩家 Transform，作为感染源与僵尸同伴 AI 的跟随目标")]
         [SerializeField] private Transform m_playerTransform;
 
+        [SerializeField] private MapRuntimeController m_mapRuntimeController;
+
         [Header("僵尸站位")]
         [Tooltip("僵尸同伴之间希望保持的最小间距，用于运行时解重叠")]
         [SerializeField, Min(0f)] private float m_zombieSeparationRadius = 0.8f;
@@ -79,6 +81,8 @@ namespace Game.Gameplay.Infection
 
         /// <summary>标记当前帧是否正在执行回响爆发，防止 EchoBurst 递归触发自身</summary>
         private bool m_isEchoBurstInProgress;
+
+        private MapRuntimeController m_cachedMapRuntimeController;
 
         // ==================== 公开属性 ====================
 
@@ -607,9 +611,48 @@ namespace Game.Gameplay.Infection
                 return;
             }
 
+            Vector2 currentPosition = zombie.Position;
             Vector2 finalPosition = m_spawnSystem != null ? m_spawnSystem.ClampToMap(position) : position;
+            MapRuntimeController map = ResolveMapRuntimeController();
+            if (map != null)
+            {
+                float clearance = ResolveZombieBlockerClearance();
+                Vector2 clampedCurrent = map.ClampToMap(currentPosition, clearance);
+                Vector2 clampedTarget = map.ClampToMap(finalPosition, clearance);
+
+                if (map.IsPointBlocked(clampedTarget, clearance) ||
+                    !map.HasDirectPath(clampedCurrent, clampedTarget, clearance))
+                {
+                    finalPosition = clampedCurrent;
+                }
+                else
+                {
+                    finalPosition = clampedTarget;
+                }
+            }
+
             Vector3 world = zombie.transform.position;
             zombie.transform.position = new Vector3(finalPosition.x, finalPosition.y, world.z);
+        }
+
+        private MapRuntimeController ResolveMapRuntimeController()
+        {
+            if (m_mapRuntimeController != null)
+            {
+                return m_mapRuntimeController;
+            }
+
+            if (m_cachedMapRuntimeController == null)
+            {
+                m_cachedMapRuntimeController = FindObjectOfType<MapRuntimeController>();
+            }
+
+            return m_cachedMapRuntimeController;
+        }
+
+        private float ResolveZombieBlockerClearance()
+        {
+            return 0.45f;
         }
 
         private Vector2 GetDeterministicSplitDirection(ZombieCompanionUnit a, ZombieCompanionUnit b)

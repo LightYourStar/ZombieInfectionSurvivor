@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Game.Config;
 using Game.Gameplay.Enemy;
 using Game.Gameplay.Skill;
+using Game.Gameplay.Wave;
 using Game.Utility;
 using UnityEngine;
 
@@ -42,6 +43,10 @@ namespace Game.Gameplay.Zombie
         [Tooltip("同 GameObject 上的 ZombieCompanionUnit 引用；留空时 Awake 中自动通过 GetComponent 补齐")]
         [SerializeField] private ZombieCompanionUnit m_unit;
 
+        [SerializeField] private MapRuntimeController m_mapRuntimeController;
+
+        [SerializeField, Min(0f)] private float m_blockerClearance = 0.45f;
+
         // ==================== 运行时依赖（由 Initialize 注入） ====================
 
         /// <summary>游戏全局配置，提供感知范围和移动速度等运行时数值</summary>
@@ -59,6 +64,8 @@ namespace Game.Gameplay.Zombie
         /// 同时避免 ZombieCompanionAI 直接引用刷怪系统的内部数据结构导致的跨模块耦合。
         /// </summary>
         private Func<IReadOnlyList<HumanUnit>> m_getActiveHumans;
+
+        private MapRuntimeController m_cachedMapRuntimeController;
 
         // ==================== 新生冲刺状态 ====================
 
@@ -300,16 +307,12 @@ namespace Game.Gameplay.Zombie
                 // 每帧都施加微小随机漂移，让静止的僵尸自然散开
                 Vector2 jitter = UnityEngine.Random.insideUnitCircle * 0.3f * deltaTime;
                 Vector3 pos = transform.position;
-                transform.position = new Vector3(pos.x + jitter.x, pos.y + jitter.y, pos.z);
+                MoveWithCollision(new Vector2(pos.x, pos.y), jitter);
                 return;
             }
 
             Vector2 displacement = moveDirection * (m_config.ZombieCompanionSpeed * deltaTime);
-            Vector3 currentPosition = transform.position;
-            transform.position = new Vector3(
-                currentPosition.x + displacement.x,
-                currentPosition.y + displacement.y,
-                currentPosition.z);
+            MoveWithCollision(selfPos, displacement);
         }
 
         // ==================== 内部辅助 ====================
@@ -357,11 +360,7 @@ namespace Game.Gameplay.Zombie
             // 冲刺速度 = 基础速度 * 倍率
             float rushSpeed = m_config.ZombieCompanionSpeed * m_config.NewbornRushSpeedMultiplier;
             Vector2 displacement = moveDirection * (rushSpeed * deltaTime);
-            Vector3 currentPosition = transform.position;
-            transform.position = new Vector3(
-                currentPosition.x + displacement.x,
-                currentPosition.y + displacement.y,
-                currentPosition.z);
+            MoveWithCollision(selfPos, displacement);
         }
 
         /// <summary>
@@ -402,6 +401,74 @@ namespace Game.Gameplay.Zombie
             }
 
             return nearest;
+        }
+
+        private bool m_mapNullWarningLogged;
+
+        private void MoveWithCollision(Vector2 currentPosition, Vector2 displacement)
+        {
+            Vector2 targetPosition = currentPosition + displacement;
+            MapRuntimeController map = ResolveMapRuntimeController();
+            if (map == null)
+            {
+                if (!m_mapNullWarningLogged)
+                {
+                    m_mapNullWarningLogged = true;
+                    Debug.LogWarning("[ZombieCompanionAI] MapRuntimeController 未找到，僵尸将无视地形碰撞。请确保场景中存在 MapRuntimeController。");
+                }
+                ApplyWorldPosition(targetPosition);
+                return;
+            }
+
+            float clearance = Mathf.Max(0f, m_blockerClearance);
+            Vector2 clampedCurrent = map.ClampToMap(currentPosition, clearance);
+            Vector2 clampedTarget = map.ClampToMap(targetPosition, clearance);
+
+            if (!map.IsPointBlocked(clampedTarget, clearance) &&
+                map.HasDirectPath(clampedCurrent, clampedTarget, clearance))
+            {
+                ApplyWorldPosition(clampedTarget);
+                return;
+            }
+
+            Vector2 xOnlyTarget = map.ClampToMap(new Vector2(currentPosition.x + displacement.x, currentPosition.y), clearance);
+            if (!map.IsPointBlocked(xOnlyTarget, clearance) &&
+                map.HasDirectPath(clampedCurrent, xOnlyTarget, clearance))
+            {
+                ApplyWorldPosition(xOnlyTarget);
+                return;
+            }
+
+            Vector2 yOnlyTarget = map.ClampToMap(new Vector2(currentPosition.x, currentPosition.y + displacement.y), clearance);
+            if (!map.IsPointBlocked(yOnlyTarget, clearance) &&
+                map.HasDirectPath(clampedCurrent, yOnlyTarget, clearance))
+            {
+                ApplyWorldPosition(yOnlyTarget);
+                return;
+            }
+
+            ApplyWorldPosition(clampedCurrent);
+        }
+
+        private void ApplyWorldPosition(Vector2 position)
+        {
+            Vector3 currentPosition = transform.position;
+            transform.position = new Vector3(position.x, position.y, currentPosition.z);
+        }
+
+        private MapRuntimeController ResolveMapRuntimeController()
+        {
+            if (m_mapRuntimeController != null)
+            {
+                return m_mapRuntimeController;
+            }
+
+            if (m_cachedMapRuntimeController == null)
+            {
+                m_cachedMapRuntimeController = FindObjectOfType<MapRuntimeController>();
+            }
+
+            return m_cachedMapRuntimeController;
         }
 
         // ==================== 冲刺视觉反馈 ====================

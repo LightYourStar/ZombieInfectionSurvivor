@@ -36,6 +36,51 @@ namespace Game.Gameplay.Wave
             m_mapMax = mapMax;
         }
 
+        public Vector2 ClampToMap(Vector2 position, float padding = 0f)
+        {
+            return new Vector2(
+                Mathf.Clamp(position.x, m_mapMin.x + padding, m_mapMax.x - padding),
+                Mathf.Clamp(position.y, m_mapMin.y + padding, m_mapMax.y - padding));
+        }
+
+        public bool IsPointBlocked(Vector2 worldPoint, float radius = 0f)
+        {
+            if (m_blockers == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < m_blockers.Length; i++)
+            {
+                if (m_blockers[i] is BoxCollider2D box && box.enabled &&
+                    IsPointInsideExpandedBox(worldPoint, radius, box))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public bool HasDirectPath(Vector2 from, Vector2 to, float clearance = 0f)
+        {
+            if (m_blockers == null)
+            {
+                return true;
+            }
+
+            for (int i = 0; i < m_blockers.Length; i++)
+            {
+                if (m_blockers[i] is BoxCollider2D box && box.enabled &&
+                    SegmentIntersectsExpandedBox(from, to, clearance, box))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         private void OnEnable()
         {
             GameEvents.OnSessionStateChanged -= HandleSessionStateChanged;
@@ -106,8 +151,7 @@ namespace Game.Gameplay.Wave
             Vector3 world = target.position;
             Vector2 position = new Vector2(world.x, world.y);
 
-            position.x = Mathf.Clamp(position.x, m_mapMin.x + radius, m_mapMax.x - radius);
-            position.y = Mathf.Clamp(position.y, m_mapMin.y + radius, m_mapMax.y - radius);
+            position = ClampToMap(position, radius);
 
             if (m_blockers != null)
             {
@@ -121,6 +165,84 @@ namespace Game.Gameplay.Wave
             }
 
             target.position = new Vector3(position.x, position.y, world.z);
+        }
+
+        private static bool IsPointInsideExpandedBox(Vector2 worldPoint, float radius, BoxCollider2D box)
+        {
+            Transform boxTransform = box.transform;
+            Vector2 localPoint = boxTransform.InverseTransformPoint(worldPoint);
+            Vector2 center = box.offset;
+            Vector2 halfSize = box.size * 0.5f;
+            Vector3 scale = boxTransform.lossyScale;
+
+            float localRadiusX = radius / Mathf.Max(0.001f, Mathf.Abs(scale.x));
+            float localRadiusY = radius / Mathf.Max(0.001f, Mathf.Abs(scale.y));
+
+            return localPoint.x >= center.x - halfSize.x - localRadiusX
+                && localPoint.x <= center.x + halfSize.x + localRadiusX
+                && localPoint.y >= center.y - halfSize.y - localRadiusY
+                && localPoint.y <= center.y + halfSize.y + localRadiusY;
+        }
+
+        private static bool SegmentIntersectsExpandedBox(Vector2 from, Vector2 to, float clearance, BoxCollider2D box)
+        {
+            Transform boxTransform = box.transform;
+            Vector2 localFrom = boxTransform.InverseTransformPoint(from);
+            Vector2 localTo = boxTransform.InverseTransformPoint(to);
+            Vector2 direction = localTo - localFrom;
+
+            Vector2 center = box.offset;
+            Vector2 halfSize = box.size * 0.5f;
+            Vector3 scale = boxTransform.lossyScale;
+
+            float localClearanceX = clearance / Mathf.Max(0.001f, Mathf.Abs(scale.x));
+            float localClearanceY = clearance / Mathf.Max(0.001f, Mathf.Abs(scale.y));
+            Vector2 min = center - halfSize - new Vector2(localClearanceX, localClearanceY);
+            Vector2 max = center + halfSize + new Vector2(localClearanceX, localClearanceY);
+
+            if (localFrom.x >= min.x && localFrom.x <= max.x && localFrom.y >= min.y && localFrom.y <= max.y)
+            {
+                return true;
+            }
+            if (localTo.x >= min.x && localTo.x <= max.x && localTo.y >= min.y && localTo.y <= max.y)
+            {
+                return true;
+            }
+
+            float tMin = 0f;
+            float tMax = 1f;
+            if (!ClipSegmentAxis(localFrom.x, direction.x, min.x, max.x, ref tMin, ref tMax))
+            {
+                return false;
+            }
+            if (!ClipSegmentAxis(localFrom.y, direction.y, min.y, max.y, ref tMin, ref tMax))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool ClipSegmentAxis(float start, float direction, float min, float max, ref float tMin, ref float tMax)
+        {
+            if (Mathf.Abs(direction) < 0.0001f)
+            {
+                return start >= min && start <= max;
+            }
+
+            float inv = 1f / direction;
+            float t1 = (min - start) * inv;
+            float t2 = (max - start) * inv;
+            if (t1 > t2)
+            {
+                float temp = t1;
+                t1 = t2;
+                t2 = temp;
+            }
+
+            tMin = Mathf.Max(tMin, t1);
+            tMax = Mathf.Min(tMax, t2);
+            return tMin <= tMax;
         }
 
         private static Vector2 ResolvePointFromBox(Vector2 worldPoint, float radius, BoxCollider2D box)

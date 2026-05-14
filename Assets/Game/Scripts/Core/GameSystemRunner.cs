@@ -770,6 +770,14 @@ namespace Game.Core
                 debugStatsPanel = panelObject.AddComponent<DebugStatsPanel>();
             }
 
+            MapDebugPanel mapDebugPanel = debugRoot.GetComponentInChildren<MapDebugPanel>(true);
+            if (mapDebugPanel == null)
+            {
+                GameObject panelObject = new GameObject("MapDebugPanel");
+                panelObject.transform.SetParent(debugRoot.transform, false);
+                mapDebugPanel = panelObject.AddComponent<MapDebugPanel>();
+            }
+
             Canvas canvas = FindObjectOfType<Canvas>();
             if (canvas == null)
             {
@@ -803,7 +811,13 @@ namespace Game.Core
                 comboTracker,
                 m_upgradeSystem,
                 m_playerStats,
-                m_gameConfig);
+                m_gameConfig,
+                m_clusterSpawner);
+
+            mapDebugPanel.Initialize(
+                m_clusterSpawner,
+                m_spawnSystem,
+                m_infectionSystem);
 
             feedbackDisplay.Initialize(
                 comboTracker,

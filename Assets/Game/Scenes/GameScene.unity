@@ -815,9 +815,17 @@ MonoBehaviour:
   m_minCount: 8
   m_maxCount: 12
   m_spawnRadius: 3.8
-  m_weight: 2.6
-  m_enableTime: 45
+  m_weight: 0.9
+  m_enableTime: 15
+  m_weightRampTime: 45
+  m_weightAfterRamp: 2.6
   m_isFinalFrenzyBoosted: 1
+  m_isOpeningPriority: 0
+  m_isFlowFallback: 1
+  m_recommendedMinPlayerDistance: 4
+  m_recommendedIdealMinPlayerDistance: 6
+  m_recommendedIdealMaxPlayerDistance: 14
+  m_recommendedMaxPlayerDistance: 18
 --- !u!4 &199127966
 Transform:
   m_ObjectHideFlags: 0
@@ -1420,7 +1428,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.08, y: 0.08}
+    oldSize: {x: 1, y: 1}
     newSize: {x: 0.08, y: 0.08}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -2199,7 +2207,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.08, y: 0.08}
+    oldSize: {x: 1, y: 1}
     newSize: {x: 0.08, y: 0.08}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -2650,6 +2658,7 @@ MonoBehaviour:
   m_spawnSystem: {fileID: 1540332633}
   m_config: {fileID: 11400000, guid: 99a99a77fc9a85c4ebcb45dc1a3ba4e0, type: 2}
   m_playerTransform: {fileID: 141911776}
+  m_mapRuntimeController: {fileID: 229667206}
   m_hotspotRoot: {fileID: 60726697}
   m_hotspots:
   - {fileID: 1965205895}
@@ -2658,6 +2667,12 @@ MonoBehaviour:
   - {fileID: 1406409180}
   - {fileID: 1693133112}
   m_finalFrenzyHotspotWeightMultiplier: 3
+  m_openingPriorityDuration: 30
+  m_lightBreakThreshold: 3
+  m_severeBreakThreshold: 5
+  m_flowTopUpCooldown: 4
+  m_flowFallbackMinDistance: 5
+  m_flowFallbackMaxDistance: 9
   m_smallClusterMin: 3
   m_smallClusterMax: 5
   m_mediumClusterMin: 8
@@ -4143,7 +4158,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.08, y: 0.08}
+    oldSize: {x: 1, y: 1}
     newSize: {x: 0.08, y: 0.08}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -4456,7 +4471,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.08, y: 0.08}
+    oldSize: {x: 1, y: 1}
     newSize: {x: 0.08, y: 0.08}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -4568,7 +4583,15 @@ MonoBehaviour:
   m_spawnRadius: 4.2
   m_weight: 2.2
   m_enableTime: 90
+  m_weightRampTime: -1
+  m_weightAfterRamp: -1
   m_isFinalFrenzyBoosted: 1
+  m_isOpeningPriority: 0
+  m_isFlowFallback: 1
+  m_recommendedMinPlayerDistance: 4
+  m_recommendedIdealMinPlayerDistance: 6
+  m_recommendedIdealMaxPlayerDistance: 14
+  m_recommendedMaxPlayerDistance: 18
 --- !u!4 &1220383545
 Transform:
   m_ObjectHideFlags: 0
@@ -4875,7 +4898,15 @@ MonoBehaviour:
   m_spawnRadius: 2.6
   m_weight: 3
   m_enableTime: 0
+  m_weightRampTime: -1
+  m_weightAfterRamp: -1
   m_isFinalFrenzyBoosted: 0
+  m_isOpeningPriority: 1
+  m_isFlowFallback: 1
+  m_recommendedMinPlayerDistance: 4
+  m_recommendedIdealMinPlayerDistance: 6
+  m_recommendedIdealMaxPlayerDistance: 14
+  m_recommendedMaxPlayerDistance: 18
 --- !u!4 &1406409181
 Transform:
   m_ObjectHideFlags: 0
@@ -5990,7 +6021,15 @@ MonoBehaviour:
   m_spawnRadius: 3
   m_weight: 2.2
   m_enableTime: 60
+  m_weightRampTime: -1
+  m_weightAfterRamp: -1
   m_isFinalFrenzyBoosted: 0
+  m_isOpeningPriority: 0
+  m_isFlowFallback: 0
+  m_recommendedMinPlayerDistance: 4
+  m_recommendedIdealMinPlayerDistance: 6
+  m_recommendedIdealMaxPlayerDistance: 14
+  m_recommendedMaxPlayerDistance: 18
 --- !u!4 &1693133113
 Transform:
   m_ObjectHideFlags: 0
@@ -6135,7 +6174,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.08, y: 0.08}
+    oldSize: {x: 1, y: 1}
     newSize: {x: 0.08, y: 0.08}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -6265,7 +6304,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.08, y: 0.08}
+    oldSize: {x: 1, y: 1}
     newSize: {x: 0.08, y: 0.08}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -6665,7 +6704,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.08, y: 0.08}
+    oldSize: {x: 1, y: 1}
     newSize: {x: 0.08, y: 0.08}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -7199,7 +7238,15 @@ MonoBehaviour:
   m_spawnRadius: 2.8
   m_weight: 4
   m_enableTime: 0
+  m_weightRampTime: -1
+  m_weightAfterRamp: -1
   m_isFinalFrenzyBoosted: 0
+  m_isOpeningPriority: 1
+  m_isFlowFallback: 1
+  m_recommendedMinPlayerDistance: 4
+  m_recommendedIdealMinPlayerDistance: 6
+  m_recommendedIdealMaxPlayerDistance: 14
+  m_recommendedMaxPlayerDistance: 18
 --- !u!4 &1965205896
 Transform:
   m_ObjectHideFlags: 0
@@ -7413,7 +7460,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.08, y: 0.08}
+    oldSize: {x: 1, y: 1}
     newSize: {x: 0.08, y: 0.08}
     adaptiveTilingThreshold: 0.5
     drawMode: 0
@@ -7637,7 +7684,7 @@ BoxCollider2D:
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
     pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 0.08, y: 0.08}
+    oldSize: {x: 1, y: 1}
     newSize: {x: 0.08, y: 0.08}
     adaptiveTilingThreshold: 0.5
     drawMode: 0

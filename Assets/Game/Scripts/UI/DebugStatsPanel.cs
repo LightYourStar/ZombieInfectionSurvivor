@@ -5,6 +5,7 @@ using Game.Gameplay.Feedback;
 using Game.Gameplay.Infection;
 using Game.Gameplay.Player;
 using Game.Gameplay.Skill;
+using Game.Gameplay.Wave;
 using UnityEngine;
 
 namespace Game.UI
@@ -22,6 +23,7 @@ namespace Game.UI
         [SerializeField] private InfectionComboTracker m_comboTracker;
         [SerializeField] private UpgradeSystem m_upgradeSystem;
         [SerializeField] private GameConfig m_gameConfig;
+        [SerializeField] private HumanClusterSpawner m_clusterSpawner;
 
         private PlayerStats m_playerStats;
         private bool m_visible = true;
@@ -76,7 +78,8 @@ namespace Game.UI
             InfectionComboTracker comboTracker,
             UpgradeSystem upgradeSystem,
             PlayerStats playerStats,
-            GameConfig gameConfig)
+            GameConfig gameConfig,
+            HumanClusterSpawner clusterSpawner = null)
         {
             m_timerSystem = timerSystem;
             m_infectionSystem = infectionSystem;
@@ -85,6 +88,7 @@ namespace Game.UI
             m_upgradeSystem = upgradeSystem;
             m_playerStats = playerStats;
             m_gameConfig = gameConfig;
+            m_clusterSpawner = clusterSpawner;
 
             if (isActiveAndEnabled)
             {
@@ -147,7 +151,7 @@ namespace Game.UI
             float lineHeight = 20f;
 
             // ===== 实时统计区 =====
-            int liveLineCount = 9;
+            int liveLineCount = 14;
             GUI.Box(new Rect(x - 6f, y - 6f, width + 12f, lineHeight * liveLineCount + 16f), string.Empty);
 
             GUI.Label(new Rect(x, y, width, lineHeight), "=== DEBUG STATS (F3) ===", m_headerStyle);
@@ -185,6 +189,21 @@ namespace Game.UI
             y += lineHeight;
 
             GUI.Label(new Rect(x, y, width, lineHeight), $"当前属性: {BuildPlayerStatsText()}", m_labelStyle);
+            y += lineHeight;
+
+            GUI.Label(new Rect(x, y, width, lineHeight), $"断流计时: 距上次感染 {GetSecondsSinceLastInfectionText()}", m_labelStyle);
+            y += lineHeight;
+
+            GUI.Label(new Rect(x, y, width, lineHeight), $"断流状态: {GetFlowStateText()}", m_labelStyle);
+            y += lineHeight;
+
+            GUI.Label(new Rect(x, y, width, lineHeight), $"最近补流: {GetFlowTopUpText()}", m_labelStyle);
+            y += lineHeight;
+
+            GUI.Label(new Rect(x, y, width, lineHeight), $"最近刷怪来源: {GetLastSpawnSourceText()}", m_labelStyle);
+            y += lineHeight;
+
+            GUI.Label(new Rect(x, y, width, lineHeight), $"最近热点/位置: {GetLastSpawnDetailText()}", m_labelStyle);
             y += lineHeight;
 
             // ===== 单局验收摘要区 =====
@@ -428,6 +447,59 @@ namespace Game.UI
             }
 
             return $"感染半径 {m_playerStats.InfectionRadius:F2} | 移动速度 {m_playerStats.MoveSpeed:F2} | 僵尸上限 {m_playerStats.ZombieCompanionCap} | 经验倍率 x{m_playerStats.ExpMultiplier:F2}";
+        }
+
+        private string GetSecondsSinceLastInfectionText()
+        {
+            return m_clusterSpawner != null
+                ? $"{m_clusterSpawner.SecondsSinceLastInfection:F1}s"
+                : "未绑定";
+        }
+
+        private string GetFlowStateText()
+        {
+            if (m_clusterSpawner == null)
+            {
+                return "未绑定";
+            }
+
+            switch (m_clusterSpawner.CurrentFlowState)
+            {
+                case InfectionFlowState.LightBreak:
+                    return "轻度断流";
+                case InfectionFlowState.SevereBreak:
+                    return "严重断流";
+                default:
+                    return "正常";
+            }
+        }
+
+        private string GetFlowTopUpText()
+        {
+            if (m_clusterSpawner == null)
+            {
+                return "未绑定";
+            }
+
+            string triggered = m_clusterSpawner.RecentFlowTopUpTriggered ? "已触发" : "未触发";
+            float cooldown = m_clusterSpawner.FlowTopUpCooldownRemaining;
+            return cooldown > 0f ? $"{triggered} / 冷却 {cooldown:F1}s" : $"{triggered} / 可触发";
+        }
+
+        private string GetLastSpawnSourceText()
+        {
+            return m_clusterSpawner != null ? m_clusterSpawner.LastSpawnSourceText : "未绑定";
+        }
+
+        private string GetLastSpawnDetailText()
+        {
+            if (m_clusterSpawner == null)
+            {
+                return "未绑定";
+            }
+
+            Vector2 position = m_clusterSpawner.LastSpawnPosition;
+            return $"{m_clusterSpawner.LastSpawnDetailText} / ({position.x:F1}, {position.y:F1})";
         }
 
         private static void AppendUpgrade(StringBuilder builder, bool condition, string text)

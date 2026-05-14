@@ -59,11 +59,11 @@ namespace Game.Editor
             blockerColliders.Add(CreateBoxBlocker(blockersRoot, pixelSprite, "ParkFenceBlocker", new Vector2(-12f, -11f), new Vector2(8f, 1f), new Color(0.24f, 0.5f, 0.28f, 0.9f)));
 
             List<SpawnHotspot> hotspots = new List<SpawnHotspot>();
-            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_Park", new Vector2(-15f, -7.5f), HumanClusterType.Small, 3, 5, 2.8f, 4f, 0f, false));
-            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_Plaza", new Vector2(0f, 3.5f), HumanClusterType.Large, 8, 25, 4.2f, 2.2f, 90f, true));
-            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_CommercialStreet", new Vector2(12.5f, -5f), HumanClusterType.Medium, 8, 12, 3.8f, 2.6f, 45f, true));
-            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_Residential", new Vector2(-15f, 6f), HumanClusterType.Small, 3, 5, 2.6f, 3f, 0f, false));
-            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_BusStop", new Vector2(13.5f, 10.5f), HumanClusterType.Medium, 6, 10, 3f, 2.2f, 60f, false));
+            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_Park", new Vector2(-15f, -7.5f), HumanClusterType.Small, 3, 5, 2.8f, 4f, 0f, false, true, true));
+            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_Plaza", new Vector2(0f, 3.5f), HumanClusterType.Large, 8, 25, 4.2f, 2.2f, 90f, true, false, true));
+            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_CommercialStreet", new Vector2(12.5f, -5f), HumanClusterType.Medium, 8, 12, 3.8f, 0.9f, 15f, true, false, true, 45f, 2.6f));
+            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_Residential", new Vector2(-15f, 6f), HumanClusterType.Small, 3, 5, 2.6f, 3f, 0f, false, true, true));
+            hotspots.Add(CreateHotspot(hotspotsRoot, "Hotspot_BusStop", new Vector2(13.5f, 10.5f), HumanClusterType.Medium, 6, 10, 3f, 2.2f, 60f, false, false, false));
 
             CreatePoint(routeHintsRoot, "RoutePoint_01", new Vector2(-15f, -7.5f));
             CreatePoint(routeHintsRoot, "RoutePoint_02", new Vector2(0f, 3.5f));
@@ -117,6 +117,10 @@ namespace Game.Editor
                 mapRuntimeController = mapRuntimeTransform.gameObject.AddComponent<MapRuntimeController>();
             }
             mapRuntimeController.Configure(spawnSystem, playerTransform, playerSpawnPoint, blockerColliders.ToArray(), MapMin, MapMax);
+            SerializedObject clusterObject = new SerializedObject(clusterSpawner);
+            SetObjectReference(clusterObject, "m_mapRuntimeController", mapRuntimeController);
+            clusterObject.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(clusterSpawner);
 
             if (playerTransform != null)
             {
@@ -244,14 +248,18 @@ namespace Game.Editor
             float spawnRadius,
             float weight,
             float enableTime,
-            bool boosted)
+            bool boosted,
+            bool openingPriority,
+            bool flowFallback,
+            float weightRampTime = -1f,
+            float weightAfterRamp = -1f)
         {
             GameObject hotspotObject = new GameObject(objectName);
             hotspotObject.transform.SetParent(parent, false);
             hotspotObject.transform.localPosition = new Vector3(position.x, position.y, 0f);
 
             SpawnHotspot hotspot = hotspotObject.AddComponent<SpawnHotspot>();
-            hotspot.Configure(objectName, clusterType, minCount, maxCount, spawnRadius, weight, enableTime, boosted);
+            hotspot.Configure(objectName, clusterType, minCount, maxCount, spawnRadius, weight, enableTime, boosted, openingPriority, flowFallback, weightRampTime, weightAfterRamp);
             return hotspot;
         }
 

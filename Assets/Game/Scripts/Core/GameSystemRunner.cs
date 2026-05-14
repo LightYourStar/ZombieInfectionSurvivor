@@ -615,6 +615,11 @@ namespace Game.Core
                 m_uiManager.HideUpgradePanel();
             }
 
+            if (m_hudPanel != null)
+            {
+                m_hudPanel.ShowUpgradeFeedback(option != null ? option.DisplayName : string.Empty);
+            }
+
             // 恢复游戏
             m_isPaused = false;
 
@@ -810,6 +815,11 @@ namespace Game.Core
         private void EnsureTemporaryMapBoundary()
         {
             if (m_spawnSystem == null)
+            {
+                return;
+            }
+
+            if (GameObject.Find("MapRoot/Background/BackgroundSprite") != null)
             {
                 return;
             }

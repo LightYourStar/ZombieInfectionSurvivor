@@ -1,5 +1,8 @@
 using System.Collections;
+using System.Reflection;
+using Game.Config;
 using Game.Core;
+using Game.Gameplay.Skill;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -57,6 +60,19 @@ namespace Game.UI
         /// <summary>FrenzyIndicator 的初始锚点位置（动画结束后用于下一局重置）</summary>
         private Vector2 m_frenzyIndicatorInitialPos = Vector2.zero;
 
+        private GameObject m_stageToastRoot;
+        private Text m_stageToastText;
+        private CanvasGroup m_stageToastCanvasGroup;
+        private Coroutine m_stageToastCoroutine;
+        private bool m_introStageShown;
+        private bool m_midStageShown;
+        private bool m_preFrenzyWarningShown;
+        private bool m_finalPushShown;
+        private bool m_isSessionPlaying;
+        private bool m_frenzyActive;
+        private GameConfig m_cachedGameConfig;
+        private UpgradeSystem m_cachedUpgradeSystem;
+
         // ==================== 初始化 ====================
 
         /// <summary>
@@ -87,6 +103,7 @@ namespace Game.UI
             GameEvents.OnLevelUp += UpdateLevel;
             GameEvents.OnInfectionCountChanged += UpdateInfectionCount;
             GameEvents.OnFinalFrenzyStarted += ShowFrenzyIndicator;
+            GameEvents.OnSessionStateChanged += HandleSessionStateChanged;
 
             if (m_timerSystem != null)
             {
@@ -109,6 +126,11 @@ namespace Game.UI
                 {
                     HideVictoryIndicator();
                 }
+
+                if (m_sessionController.CurrentState == SessionState.Playing)
+                {
+                    BeginStagePrompts();
+                }
             }
         }
 
@@ -119,6 +141,7 @@ namespace Game.UI
             GameEvents.OnLevelUp -= UpdateLevel;
             GameEvents.OnInfectionCountChanged -= UpdateInfectionCount;
             GameEvents.OnFinalFrenzyStarted -= ShowFrenzyIndicator;
+            GameEvents.OnSessionStateChanged -= HandleSessionStateChanged;
 
             if (m_timerSystem != null)
             {
@@ -142,6 +165,8 @@ namespace Game.UI
                 int seconds = Mathf.FloorToInt(remainingSeconds % 60f);
                 m_timeText.text = $"{minutes:00}:{seconds:00}";
             }
+
+            UpdateStagePrompts(remainingSeconds);
         }
 
         private void UpdateExp(int currentExp)
@@ -197,6 +222,7 @@ namespace Game.UI
             if (m_ratingPreviewText != null)
             {
                 m_ratingPreviewText.text = rating.ToString();
+                m_ratingPreviewText.color = GetRatingColor(rating);
             }
         }
 
@@ -235,6 +261,8 @@ namespace Game.UI
                 return;
             }
 
+            m_frenzyActive = true;
+
             // 停止上一次可能还在播放的动画
             if (m_frenzyCoroutine != null)
             {
@@ -259,6 +287,7 @@ namespace Game.UI
 
             m_frenzyIndicator.SetActive(true);
             m_frenzyCoroutine = StartCoroutine(FrenzyIndicatorAnimation());
+            ShowStageToast("FINAL FRENZY STARTED", new Color(1f, 0.35f, 0.12f, 1f), 2.2f);
 
             // 狂潮开始时立刻刷新目标提示，切换为冲刺语气
             UpdateNextGoalText();
@@ -279,6 +308,19 @@ namespace Game.UI
             {
                 m_frenzyIndicator.SetActive(false);
             }
+
+            m_frenzyActive = false;
+        }
+
+        public void ShowUpgradeFeedback(string upgradeName)
+        {
+            if (string.IsNullOrWhiteSpace(upgradeName))
+            {
+                ShowStageToast("UPGRADE ACQUIRED", new Color(0.6f, 1f, 0.55f, 1f), 1.5f);
+                return;
+            }
+
+            ShowStageToast($"UPGRADE: {upgradeName}", new Color(0.6f, 1f, 0.55f, 1f), 1.7f);
         }
 
         /// <summary>
@@ -420,6 +462,251 @@ namespace Game.UI
             m_frenzyIndicator = go;
             m_frenzyIndicatorInitialPos = Vector2.zero; // 记录初始位置
             go.SetActive(false);
+        }
+
+        private void HandleSessionStateChanged(SessionState state)
+        {
+            if (state == SessionState.Playing)
+            {
+                BeginStagePrompts();
+                return;
+            }
+
+            m_isSessionPlaying = false;
+        }
+
+        private void BeginStagePrompts()
+        {
+            m_isSessionPlaying = true;
+            m_introStageShown = false;
+            m_midStageShown = false;
+            m_preFrenzyWarningShown = false;
+            m_finalPushShown = false;
+            m_frenzyActive = false;
+            HideStageToast();
+        }
+
+        private void UpdateStagePrompts(float remainingSeconds)
+        {
+            if (!m_isSessionPlaying)
+            {
+                return;
+            }
+
+            float totalDuration = m_timerSystem != null ? Mathf.Max(1f, m_timerSystem.TotalDuration) : 180f;
+            float elapsed = Mathf.Max(0f, totalDuration - remainingSeconds);
+
+            if (!m_introStageShown && elapsed >= 1f)
+            {
+                m_introStageShown = true;
+                ShowStageToast("OUTBREAK STARTED", new Color(1f, 0.72f, 0.28f, 1f), 1.4f);
+            }
+
+            if (!m_midStageShown && elapsed >= 30f)
+            {
+                m_midStageShown = true;
+                ShowStageToast("CHAIN ONLINE", new Color(0.5f, 1f, 0.55f, 1f), 1.4f);
+            }
+
+            float frenzyStartRemainingTime = GetFrenzyStartRemainingTime();
+            float frenzyWarningTime = frenzyStartRemainingTime + 12f;
+            if (!m_preFrenzyWarningShown && !m_frenzyActive &&
+                remainingSeconds <= frenzyWarningTime && remainingSeconds > frenzyStartRemainingTime)
+            {
+                m_preFrenzyWarningShown = true;
+                ShowStageToast("FRENZY INCOMING", new Color(1f, 0.56f, 0.2f, 1f), 1.6f);
+            }
+
+            if (!m_finalPushShown && remainingSeconds <= 15f)
+            {
+                m_finalPushShown = true;
+                ShowStageToast("FINAL PUSH", new Color(1f, 0.92f, 0.35f, 1f), 1.5f);
+            }
+        }
+
+        private void ShowStageToast(string message, Color color, float holdDuration)
+        {
+            EnsureStageToastBuilt();
+            if (m_stageToastRoot == null || m_stageToastText == null || m_stageToastCanvasGroup == null)
+            {
+                return;
+            }
+
+            m_stageToastText.text = message;
+            m_stageToastText.color = color;
+            m_stageToastRoot.SetActive(true);
+
+            if (m_stageToastCoroutine != null)
+            {
+                StopCoroutine(m_stageToastCoroutine);
+            }
+
+            m_stageToastCoroutine = StartCoroutine(StageToastAnimation(holdDuration));
+        }
+
+        private void HideStageToast()
+        {
+            if (m_stageToastCoroutine != null)
+            {
+                StopCoroutine(m_stageToastCoroutine);
+                m_stageToastCoroutine = null;
+            }
+
+            if (m_stageToastRoot != null)
+            {
+                m_stageToastRoot.SetActive(false);
+            }
+
+            if (m_stageToastCanvasGroup != null)
+            {
+                m_stageToastCanvasGroup.alpha = 0f;
+            }
+        }
+
+        private IEnumerator StageToastAnimation(float holdDuration)
+        {
+            RectTransform rect = m_stageToastRoot.GetComponent<RectTransform>();
+            float elapsed = 0f;
+            const float fadeInDuration = 0.12f;
+            const float fadeOutDuration = 0.25f;
+
+            while (elapsed < fadeInDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / fadeInDuration);
+                m_stageToastCanvasGroup.alpha = t;
+                rect.localScale = Vector3.one * Mathf.Lerp(1.08f, 1f, t);
+                yield return null;
+            }
+
+            m_stageToastCanvasGroup.alpha = 1f;
+            rect.localScale = Vector3.one;
+            yield return new WaitForSecondsRealtime(holdDuration);
+
+            elapsed = 0f;
+            while (elapsed < fadeOutDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / fadeOutDuration);
+                m_stageToastCanvasGroup.alpha = 1f - t;
+                yield return null;
+            }
+
+            m_stageToastCanvasGroup.alpha = 0f;
+            m_stageToastRoot.SetActive(false);
+            m_stageToastCoroutine = null;
+        }
+
+        private void EnsureStageToastBuilt()
+        {
+            if (m_stageToastText != null)
+            {
+                return;
+            }
+
+            GameObject root = new GameObject("StageToast", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(CanvasGroup));
+            root.transform.SetParent(transform, false);
+
+            RectTransform rootRect = root.GetComponent<RectTransform>();
+            rootRect.anchorMin = new Vector2(0.5f, 0.74f);
+            rootRect.anchorMax = new Vector2(0.5f, 0.74f);
+            rootRect.pivot = new Vector2(0.5f, 0.5f);
+            rootRect.anchoredPosition = Vector2.zero;
+            rootRect.sizeDelta = new Vector2(520f, 46f);
+
+            Image bg = root.GetComponent<Image>();
+            bg.color = new Color(0.04f, 0.035f, 0.03f, 0.72f);
+
+            CanvasGroup cg = root.GetComponent<CanvasGroup>();
+            cg.alpha = 0f;
+
+            GameObject textGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            textGo.transform.SetParent(root.transform, false);
+
+            RectTransform textRect = textGo.GetComponent<RectTransform>();
+            textRect.anchorMin = Vector2.zero;
+            textRect.anchorMax = Vector2.one;
+            textRect.offsetMin = Vector2.zero;
+            textRect.offsetMax = Vector2.zero;
+
+            Text text = textGo.GetComponent<Text>();
+            text.text = string.Empty;
+            text.fontSize = 24;
+            text.fontStyle = FontStyle.Bold;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.white;
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+            m_stageToastRoot = root;
+            m_stageToastText = text;
+            m_stageToastCanvasGroup = cg;
+            root.SetActive(false);
+        }
+
+        private float GetFrenzyStartRemainingTime()
+        {
+            GameConfig config = ResolveGameConfig();
+            float startRemainingTime = config != null ? config.FinalFrenzyStartRemainingTime : 40f;
+
+            UpgradeSystem upgradeSystem = ResolveUpgradeSystem();
+            if (upgradeSystem != null && upgradeSystem.SessionState != null)
+            {
+                startRemainingTime = upgradeSystem.SessionState.GetFinalFrenzyStartTime(startRemainingTime);
+            }
+
+            return startRemainingTime;
+        }
+
+        private GameConfig ResolveGameConfig()
+        {
+            if (m_cachedGameConfig != null)
+            {
+                return m_cachedGameConfig;
+            }
+
+            if (m_sessionController == null)
+            {
+                return null;
+            }
+
+            FieldInfo field = typeof(GameSessionController).GetField("m_config", BindingFlags.Instance | BindingFlags.NonPublic);
+            m_cachedGameConfig = field != null ? field.GetValue(m_sessionController) as GameConfig : null;
+            return m_cachedGameConfig;
+        }
+
+        private UpgradeSystem ResolveUpgradeSystem()
+        {
+            if (m_cachedUpgradeSystem != null)
+            {
+                return m_cachedUpgradeSystem;
+            }
+
+            if (m_sessionController == null)
+            {
+                return null;
+            }
+
+            FieldInfo field = typeof(GameSessionController).GetField("m_upgradeSystem", BindingFlags.Instance | BindingFlags.NonPublic);
+            m_cachedUpgradeSystem = field != null ? field.GetValue(m_sessionController) as UpgradeSystem : null;
+            return m_cachedUpgradeSystem;
+        }
+
+        private Color GetRatingColor(SessionRating rating)
+        {
+            switch (rating)
+            {
+                case SessionRating.SS:
+                    return new Color(1f, 0.82f, 0.18f, 1f);
+                case SessionRating.S:
+                    return new Color(1f, 0.48f, 0.18f, 1f);
+                case SessionRating.A:
+                    return new Color(0.45f, 0.95f, 0.55f, 1f);
+                case SessionRating.B:
+                    return new Color(0.7f, 0.86f, 1f, 1f);
+                default:
+                    return Color.white;
+            }
         }
     }
 }

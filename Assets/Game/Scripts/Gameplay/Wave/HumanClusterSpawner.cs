@@ -39,6 +39,16 @@ namespace Game.Gameplay.Wave
         [Tooltip("玩家 Transform，用于计算簇放置距离")]
         [SerializeField] private Transform m_playerTransform;
 
+        [Header("热点配置")]
+        [Tooltip("热点根节点，留空时会在场景中自动查找 SpawnHotspot")]
+        [SerializeField] private Transform m_hotspotRoot;
+
+        [Tooltip("可用于刷新人群簇的热点列表")]
+        [SerializeField] private List<SpawnHotspot> m_hotspots = new List<SpawnHotspot>();
+
+        [Tooltip("末日狂潮期间对标记热点使用的权重倍率")]
+        [SerializeField, Min(1f)] private float m_finalFrenzyHotspotWeightMultiplier = 3f;
+
         // ==================== 簇配置参数 ====================
 
         [Header("簇大小配置")]
@@ -96,6 +106,9 @@ namespace Game.Gameplay.Wave
         /// <summary>是否已进入末日狂潮模式</summary>
         private bool m_isFinalFrenzy;
 
+        /// <summary>当前单局已进行时间，由 UpdateSpawn 推进</summary>
+        private float m_elapsedTime;
+
         // ==================== 公开属性 ====================
 
         /// <summary>小簇最少人数（供测试访问）</summary>
@@ -128,6 +141,9 @@ namespace Game.Gameplay.Wave
         /// <summary>已生成的簇中心位置只读列表</summary>
         public IReadOnlyList<Vector2> ClusterCenters => m_clusterCenters;
 
+        /// <summary>当前配置的人群热点列表</summary>
+        public IReadOnlyList<SpawnHotspot> Hotspots => m_hotspots;
+
         // ==================== 初始化 ====================
 
         /// <summary>
@@ -138,6 +154,7 @@ namespace Game.Gameplay.Wave
         public void Initialize(Func<IReadOnlyList<Vector2>> getZombiePositions)
         {
             m_getZombiePositions = getZombiePositions;
+            RefreshHotspots();
 
             // 先取消再订阅，防止重复初始化导致重复订阅
             Game.Core.GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
@@ -162,6 +179,11 @@ namespace Game.Gameplay.Wave
 
             for (int i = 0; i < clusterCount; i++)
             {
+                if (TrySpawnClusterFromHotspot(false))
+                {
+                    continue;
+                }
+
                 // 选择满足约束的簇中心位置：距玩家 [3, 8] 且与已有簇中心距离 >= 5
                 Vector2 center = PickClusterCenterInRange(
                     m_initialSpawnMinDist,
@@ -186,11 +208,12 @@ namespace Game.Gameplay.Wave
         /// <param name="deltaTime">本帧时间增量</param>
         public void UpdateSpawn(float deltaTime)
         {
-            if (!ValidateDependencies() || m_playerTransform == null)
+            if (!ValidateDependencies() || m_playerTransform == null || deltaTime <= 0f)
             {
                 return;
             }
 
+            m_elapsedTime += deltaTime;
             m_spawnTimer += deltaTime;
 
             // 末日狂潮期间使用更短的刷新间隔
@@ -209,6 +232,11 @@ namespace Game.Gameplay.Wave
                 if (m_spawnSystem.ActiveHumanCount >= currentHumanCap)
                 {
                     break;
+                }
+
+                if (TrySpawnClusterFromHotspot(false))
+                {
+                    continue;
                 }
 
                 // 根据是否处于末日狂潮选择簇大小
@@ -256,6 +284,8 @@ namespace Game.Gameplay.Wave
             m_clusterCenters.Clear();
             m_spawnTimer = 0f;
             m_isFinalFrenzy = false;
+            m_elapsedTime = 0f;
+            RefreshHotspots();
         }
 
         /// <summary>
@@ -270,11 +300,14 @@ namespace Game.Gameplay.Wave
             // 分批刷出首波大簇，而不是同一帧全部创建
             if (ValidateDependencies() && m_playerTransform != null && m_config != null)
             {
-                int burstSize = UnityEngine.Random.Range(
-                    m_config.FinalFrenzyLargeClusterMin,
-                    m_config.FinalFrenzyLargeClusterMax + 1);
-                Vector2 center = PickClusterCenter(GetCurrentSpawnMinDistanceFromPlayer(), m_clusterMinSeparation);
-                StartCoroutine(StaggeredSpawnCluster(center, burstSize));
+                if (!TrySpawnClusterFromHotspot(true))
+                {
+                    int burstSize = UnityEngine.Random.Range(
+                        m_config.FinalFrenzyLargeClusterMin,
+                        m_config.FinalFrenzyLargeClusterMax + 1);
+                    Vector2 center = PickClusterCenter(GetCurrentSpawnMinDistanceFromPlayer(), m_clusterMinSeparation);
+                    StartCoroutine(StaggeredSpawnCluster(center, burstSize, m_clusterRadius));
+                }
             }
         }
 
@@ -283,7 +316,7 @@ namespace Game.Gameplay.Wave
         /// </summary>
         /// <param name="center">簇中心位置</param>
         /// <param name="totalCount">总人数</param>
-        private IEnumerator StaggeredSpawnCluster(Vector2 center, int totalCount)
+        private IEnumerator StaggeredSpawnCluster(Vector2 center, int totalCount, float radius)
         {
             const int batchCount = 4;
             const float totalDuration = 0.25f;
@@ -300,7 +333,7 @@ namespace Game.Gameplay.Wave
                 }
 
                 // 使用现有 SpawnCluster 生成本批
-                SpawnCluster(center, batchSize);
+                SpawnCluster(center, batchSize, radius);
                 spawned += batchSize;
 
                 if (batch < batchCount - 1)
@@ -317,6 +350,125 @@ namespace Game.Gameplay.Wave
 
         // ==================== 内部方法 ====================
 
+        private bool TrySpawnClusterFromHotspot(bool staggered)
+        {
+            if (!TryPickHotspot(out SpawnHotspot hotspot))
+            {
+                return false;
+            }
+
+            int count = hotspot.GetRandomCount();
+            int currentHumanCap = GetCurrentHumanMaxCount();
+            int remainingCapacity = Mathf.Max(0, currentHumanCap - m_spawnSystem.ActiveHumanCount);
+            if (remainingCapacity <= 0)
+            {
+                return true;
+            }
+
+            count = Mathf.Min(count, remainingCapacity);
+            Vector2 center = hotspot.Position;
+            float radius = hotspot.SpawnRadius;
+
+            if (staggered)
+            {
+                StartCoroutine(StaggeredSpawnCluster(center, count, radius));
+            }
+            else
+            {
+                SpawnCluster(center, count, radius);
+            }
+
+            return true;
+        }
+
+        private bool TryPickHotspot(out SpawnHotspot hotspot)
+        {
+            RefreshHotspots();
+
+            hotspot = null;
+            bool isFinalFrenzy = m_isFinalFrenzy && m_config != null && m_config.EnableFinalFrenzy;
+            float totalWeight = 0f;
+
+            for (int i = 0; i < m_hotspots.Count; i++)
+            {
+                SpawnHotspot candidate = m_hotspots[i];
+                if (candidate == null || !candidate.IsEnabledAt(m_elapsedTime))
+                {
+                    continue;
+                }
+
+                totalWeight += candidate.GetEffectiveWeight(isFinalFrenzy, m_finalFrenzyHotspotWeightMultiplier);
+            }
+
+            if (totalWeight <= 0f)
+            {
+                return false;
+            }
+
+            float roll = UnityEngine.Random.Range(0f, totalWeight);
+            float cursor = 0f;
+
+            for (int i = 0; i < m_hotspots.Count; i++)
+            {
+                SpawnHotspot candidate = m_hotspots[i];
+                if (candidate == null || !candidate.IsEnabledAt(m_elapsedTime))
+                {
+                    continue;
+                }
+
+                cursor += candidate.GetEffectiveWeight(isFinalFrenzy, m_finalFrenzyHotspotWeightMultiplier);
+                if (roll <= cursor)
+                {
+                    hotspot = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void RefreshHotspots()
+        {
+            if (m_hotspots == null)
+            {
+                m_hotspots = new List<SpawnHotspot>();
+            }
+
+            for (int i = m_hotspots.Count - 1; i >= 0; i--)
+            {
+                if (m_hotspots[i] == null)
+                {
+                    m_hotspots.RemoveAt(i);
+                }
+            }
+
+            if (m_hotspotRoot != null)
+            {
+                SpawnHotspot[] childHotspots = m_hotspotRoot.GetComponentsInChildren<SpawnHotspot>(true);
+                for (int i = 0; i < childHotspots.Length; i++)
+                {
+                    if (!m_hotspots.Contains(childHotspots[i]))
+                    {
+                        m_hotspots.Add(childHotspots[i]);
+                    }
+                }
+            }
+
+            if (m_hotspots.Count > 0)
+            {
+                return;
+            }
+
+            SpawnHotspot[] sceneHotspots = FindObjectsOfType<SpawnHotspot>(true);
+            for (int i = 0; i < sceneHotspots.Length; i++)
+            {
+                if (!m_hotspots.Contains(sceneHotspots[i]))
+                {
+                    m_hotspots.Add(sceneHotspots[i]);
+                }
+            }
+        }
+
         /// <summary>
         /// 在指定中心位置生成一个包含 count 个人类的簇。
         /// 使用均匀圆盘分布（uniform disk distribution）在簇半径内放置人类，
@@ -326,10 +478,21 @@ namespace Game.Gameplay.Wave
         /// <param name="count">簇内人类数量</param>
         internal void SpawnCluster(Vector2 center, int count)
         {
+            SpawnCluster(center, count, m_clusterRadius);
+        }
+
+        /// <summary>
+        /// 在指定中心位置和半径内生成一个人群簇。
+        /// </summary>
+        internal void SpawnCluster(Vector2 center, int count, float radius)
+        {
             if (!ValidateDependencies())
             {
                 return;
             }
+
+            int spawnedCount = 0;
+            radius = Mathf.Max(0.1f, radius);
 
             for (int i = 0; i < count; i++)
             {
@@ -348,7 +511,7 @@ namespace Game.Gameplay.Wave
                 }
 
                 // 使用均匀圆盘分布计算簇内位置
-                Vector2 spawnPos = GetPositionInCluster(center, m_clusterRadius);
+                Vector2 spawnPos = GetPositionInCluster(center, radius);
 
                 // 将位置钳制到地图范围内
                 if (m_spawnSystem != null)
@@ -367,6 +530,12 @@ namespace Game.Gameplay.Wave
 
                 // 注册到 SpawnSystem 的活跃列表
                 RegisterHumanToSpawnSystem(human);
+                spawnedCount++;
+            }
+
+            if (spawnedCount <= 0)
+            {
+                return;
             }
 
             // 记录簇中心位置，用于后续簇间距约束检查。

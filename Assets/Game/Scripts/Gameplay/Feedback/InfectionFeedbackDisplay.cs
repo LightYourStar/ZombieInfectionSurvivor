@@ -1,4 +1,5 @@
 using System.Collections;
+using Game.Core;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,10 +23,12 @@ namespace Game.UI
         [SerializeField] private Camera m_camera;
         [SerializeField] private float m_shakeIntensity = 0.15f;
         [SerializeField] private float m_shakeDuration = 0.12f;
+        [SerializeField] private float m_shakeCooldown = 0.18f;
 
         private Coroutine m_comboFadeCoroutine;
         private Coroutine m_shakeCoroutine;
         private Vector3 m_cameraOriginalPos;
+        private float m_nextShakeAllowedTime;
 
         private void Awake()
         {
@@ -68,26 +71,30 @@ namespace Game.UI
 
         private void SubscribeEvents()
         {
-            if (m_comboTracker == null)
-            {
-                return;
-            }
+            GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
+            GameEvents.OnLevelUp -= HandleLevelUp;
+            GameEvents.OnFinalFrenzyStarted += HandleFinalFrenzyStarted;
+            GameEvents.OnLevelUp += HandleLevelUp;
 
-            m_comboTracker.OnComboMilestone -= ShowComboMilestone;
-            m_comboTracker.OnBurstEvent -= HandleBurstEvent;
-            m_comboTracker.OnComboMilestone += ShowComboMilestone;
-            m_comboTracker.OnBurstEvent += HandleBurstEvent;
+            if (m_comboTracker != null)
+            {
+                m_comboTracker.OnComboMilestone -= ShowComboMilestone;
+                m_comboTracker.OnBurstEvent -= HandleBurstEvent;
+                m_comboTracker.OnComboMilestone += ShowComboMilestone;
+                m_comboTracker.OnBurstEvent += HandleBurstEvent;
+            }
         }
 
         private void UnsubscribeEvents()
         {
-            if (m_comboTracker == null)
-            {
-                return;
-            }
+            GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
+            GameEvents.OnLevelUp -= HandleLevelUp;
 
-            m_comboTracker.OnComboMilestone -= ShowComboMilestone;
-            m_comboTracker.OnBurstEvent -= HandleBurstEvent;
+            if (m_comboTracker != null)
+            {
+                m_comboTracker.OnComboMilestone -= ShowComboMilestone;
+                m_comboTracker.OnBurstEvent -= HandleBurstEvent;
+            }
         }
 
         private void ShowComboMilestone(int combo)
@@ -132,7 +139,7 @@ namespace Game.UI
 
         private void HandleBurstEvent(int count)
         {
-            if (m_camera != null)
+            if (m_camera != null && Time.unscaledTime >= m_nextShakeAllowedTime)
             {
                 if (m_shakeCoroutine != null)
                 {
@@ -140,10 +147,21 @@ namespace Game.UI
                     m_camera.transform.position = m_cameraOriginalPos;
                 }
 
+                m_nextShakeAllowedTime = Time.unscaledTime + m_shakeCooldown;
                 m_shakeCoroutine = StartCoroutine(ScreenShake());
             }
 
             ShowFloatingText($"BURST x{count}!", new Color(1f, 1f, 0.3f), 34);
+        }
+
+        private void HandleFinalFrenzyStarted()
+        {
+            ShowFloatingText("FINAL FRENZY!", new Color(1f, 0.36f, 0.12f), 44);
+        }
+
+        private void HandleLevelUp(int level)
+        {
+            ShowFloatingText($"LEVEL {level}!", new Color(0.58f, 1f, 0.5f), 34);
         }
 
         private void ShowFloatingText(string text, Color color, int fontSize)

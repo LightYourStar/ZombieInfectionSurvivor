@@ -19,6 +19,7 @@ namespace Game.UI
         [SerializeField] private Button m_restartButton;
 
         // 新增结算字段（运行时自动创建）
+        private Text m_performanceSummaryText;
         private Text m_maxComboText;
         private Text m_frenzyInfectedText;
         private Text m_upgradeSummaryText;
@@ -63,6 +64,9 @@ namespace Game.UI
             if (m_victoryStatusText != null)
                 m_victoryStatusText.text = result.IsVictory ? "胜利" : "未达成";
 
+            if (m_performanceSummaryText != null)
+                m_performanceSummaryText.text = BuildPerformanceSummary(result);
+
             if (m_upgradeSummaryText != null)
                 m_upgradeSummaryText.text = result.UpgradeSummary;
 
@@ -89,6 +93,7 @@ namespace Game.UI
                 m_infectedCountText != null &&
                 m_maxZombieCountText != null &&
                 m_maxComboText != null &&
+                m_performanceSummaryText != null &&
                 m_ratingText != null &&
                 m_victoryStatusText != null &&
                 m_restartButton != null;
@@ -155,6 +160,14 @@ namespace Game.UI
                 "胜利",
                 34,
                 new Color(0.96f, 0.92f, 0.68f, 1f),
+                FontStyle.Bold);
+
+            m_performanceSummaryText = CreateStandaloneText(
+                "PerformanceSummaryText",
+                card.transform,
+                "Good run",
+                20,
+                new Color(1f, 0.82f, 0.28f, 1f),
                 FontStyle.Bold);
 
             m_infectedCountText = CreateStatRow(card.transform, "总感染数", "127");
@@ -332,6 +345,28 @@ namespace Game.UI
             rect.sizeDelta = new Vector2(0f, fontSize + 16f);
 
             return text;
+        }
+
+        private string BuildPerformanceSummary(SessionResult result)
+        {
+            if (!result.IsVictory)
+            {
+                return "差一点成型，开局再快些";
+            }
+
+            switch (result.Rating)
+            {
+                case SessionRating.SS:
+                    return "神局爆发，尸潮彻底失控";
+                case SessionRating.S:
+                    return "强势收割，节奏很稳";
+                case SessionRating.A:
+                    return result.FrenzyInfectedCount >= 80 ? "狂潮收尾漂亮" : "稳定通关，继续冲 S";
+                case SessionRating.B:
+                    return result.MaxCombo >= 20 ? "连锁已经成型" : "稳稳过关，连锁还能更高";
+                default:
+                    return "完成本局，继续压缩起势时间";
+            }
         }
 
         private void SetVisible(bool visible)

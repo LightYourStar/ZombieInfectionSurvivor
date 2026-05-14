@@ -158,10 +158,10 @@ namespace Game.Config
 
         [Header("对象池参数")]
         [Tooltip("Human 对象池初始预创建数量，应不小于 HumanMaxCount")]
-        [SerializeField] private int m_humanPoolInitialSize = 60;
+        [SerializeField] private int m_humanPoolInitialSize = 110;
 
         [Tooltip("ZombieCompanion 对象池初始预创建数量，应不小于 ZombieCompanionMaxCount")]
-        [SerializeField] private int m_zombiePoolInitialSize = 40;
+        [SerializeField] private int m_zombiePoolInitialSize = 75;
 
         /// <summary>Human 对象池初始预创建数量。</summary>
         public int HumanPoolInitialSize => m_humanPoolInitialSize;

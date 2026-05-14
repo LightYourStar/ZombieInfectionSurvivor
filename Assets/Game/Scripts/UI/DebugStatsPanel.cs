@@ -549,7 +549,7 @@ namespace Game.UI
                     case ZombieCompanionAI.SwarmState.Frenzy: frenzy++; break;
                 }
             }
-            return $"Follow:{follow} Hunt:{hunt} Return:{ret} Frenzy:{frenzy}";
+            return $"Follow:{follow} Hunt:{hunt}/{ZombieCompanionAI.CurrentHuntTargetCount} Return:{ret} Frenzy:{frenzy}";
         }
 
         private int CountStuckZombies()

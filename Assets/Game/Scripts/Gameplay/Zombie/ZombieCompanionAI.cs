@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Game.Config;
+using Game.Core;
 using Game.Gameplay.Enemy;
 using Game.Gameplay.Skill;
 using Game.Gameplay.Wave;
@@ -82,7 +83,10 @@ namespace Game.Gameplay.Zombie
         private float m_slotRefreshTimer;
 
         /// <summary>槽位刷新间隔（秒）</summary>
-        private const float SlotRefreshInterval = 3f;
+        private float m_slotRefreshInterval;
+
+        private const float SlotRefreshIntervalMin = 2f;
+        private const float SlotRefreshIntervalMax = 4f;
 
         /// <summary>跟随最小距离</summary>
         private const float FollowMinRadius = 2f;
@@ -91,25 +95,35 @@ namespace Game.Gameplay.Zombie
         private const float FollowMaxRadius = 5.5f;
 
         /// <summary>Hunt 最大脱离玩家距离，超过则 Return</summary>
-        private const float MaxDetachDistance = 12f;
+        private const float MaxDetachDistance = 16f;
+
+        private const float ReturnExitDistance = 7f;
 
         /// <summary>Hunt 目标最大距离（相对于玩家）</summary>
-        private const float MaxHuntTargetDistFromPlayer = 10f;
+        private const float MaxHuntTargetDistFromPlayer = 12f;
+
+        private const float HuntPromoteMinDistance = 3.75f;
+        private const float HuntTargetSearchMultiplier = 1.6f;
 
         /// <summary>全局活跃 Hunter 计数（静态共享）</summary>
         private static int s_activeHunterCount;
 
-        /// <summary>最大同时 Hunt 僵尸数</summary>
-        private const int MaxActiveHunters = 15;
+        /// <summary>全局活跃 Zombie AI 计数，用于按尸群规模计算 Hunt 目标数</summary>
+        private static int s_activeZombieAICount;
+        private static bool s_isFinalFrenzyActive;
 
         /// <summary>是否已注册为 Hunter</summary>
         private bool m_isRegisteredHunter;
+
+        private bool m_isRegisteredActiveAI;
 
         /// <summary>当前行为状态（供 Debug 读取）</summary>
         public SwarmState CurrentSwarmState => m_swarmState;
 
         /// <summary>全局活跃 Hunter 数量（供 Debug 读取）</summary>
         public static int ActiveHunterCount => s_activeHunterCount;
+
+        public static int CurrentHuntTargetCount => CalculateTargetHunterCount();
 
         // ==================== 卡住检测 ====================
 
@@ -119,14 +133,25 @@ namespace Game.Gameplay.Zombie
         /// <summary>卡住计时器（秒）</summary>
         private float m_stuckTimer;
 
+        private float m_stuckSampleTimer;
+
+        private float m_continuousStuckDuration;
+
         /// <summary>卡住判定阈值（秒）</summary>
         private const float StuckThreshold = 1.0f;
 
         /// <summary>卡住判定最小移动距离</summary>
-        private const float StuckMinMoveDist = 0.1f;
+        private const float StuckMinMoveDist = 0.2f;
+
+        private const float StuckSampleInterval = 0.4f;
+        private const float StuckRecoveryCooldown = 1.5f;
+        private const float StuckMoveRequestMinDistance = 0.02f;
 
         /// <summary>连续卡住恢复次数</summary>
         private int m_consecutiveStuckCount;
+
+        private float m_lastStuckRecoveryTime = -999f;
+        private bool m_hasMoveRequestThisFrame;
 
         /// <summary>紧急传送冷却时间</summary>
         private float m_lastTeleportTime = -999f;
@@ -135,7 +160,7 @@ namespace Game.Gameplay.Zombie
         private const float TeleportCooldown = 5f;
 
         /// <summary>是否当前被判定为卡住</summary>
-        public bool IsStuck => m_stuckTimer >= StuckThreshold;
+        public bool IsStuck => m_continuousStuckDuration >= StuckThreshold;
 
         /// <summary>全局卡住恢复计数（供 Debug）</summary>
         public static int TotalStuckRecoveryCount { get; private set; }
@@ -150,10 +175,20 @@ namespace Game.Gameplay.Zombie
         public static void ResetGlobalDebugCounters()
         {
             s_activeHunterCount = 0;
+            s_activeZombieAICount = 0;
+            s_isFinalFrenzyActive = false;
             TotalStuckRecoveryCount = 0;
             TotalReassignedSlotCount = 0;
             TotalEmergencyTeleportCount = 0;
             TotalVisibleTeleportBlockedCount = 0;
+
+            GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
+            GameEvents.OnFinalFrenzyStarted += HandleFinalFrenzyStarted;
+        }
+
+        private static void HandleFinalFrenzyStarted()
+        {
+            s_isFinalFrenzyActive = true;
         }
 
         // ==================== 新生冲刺状态 ====================
@@ -208,6 +243,7 @@ namespace Game.Gameplay.Zombie
             m_playerTransform = playerTransform;
             m_getActiveHumans = getActiveHumans;
             m_sessionState = sessionState;
+            RegisterActiveAI();
 
             // 重置冲刺状态（对象池复用时清理残留）
             m_rushRemainingTime = 0f;
@@ -215,12 +251,16 @@ namespace Game.Gameplay.Zombie
             // 初始化尸潮状态
             UnregisterHunter();
             m_swarmState = SwarmState.Follow;
-            RefreshFollowSlot();
-            m_slotRefreshTimer = UnityEngine.Random.Range(0f, SlotRefreshInterval);
+            RefreshFollowSlot(false);
+            m_slotRefreshInterval = UnityEngine.Random.Range(SlotRefreshIntervalMin, SlotRefreshIntervalMax);
+            m_slotRefreshTimer = UnityEngine.Random.Range(0f, m_slotRefreshInterval);
 
             // 重置卡住检测
             m_stuckTimer = 0f;
+            m_stuckSampleTimer = 0f;
+            m_continuousStuckDuration = 0f;
             m_consecutiveStuckCount = 0;
+            m_lastStuckRecoveryTime = -999f;
             m_lastRecordedPos = m_unit != null ? m_unit.Position : Vector2.zero;
         }
 
@@ -334,6 +374,7 @@ namespace Game.Gameplay.Zombie
             }
 
             Vector2 selfPos = m_unit.Position;
+            m_hasMoveRequestThisFrame = false;
 
             // 新生冲刺（Frenzy）状态处理
             if (m_rushRemainingTime > 0f)
@@ -380,26 +421,26 @@ namespace Game.Gameplay.Zombie
             }
 
             // 卡住检测（在状态更新后执行）
-            UpdateStuckDetection(selfPos, deltaTime);
+            UpdateStuckDetectionThrottled(m_unit.Position, deltaTime);
         }
 
         private void UpdateFollowState(Vector2 selfPos, Vector2 playerPos, float distToPlayer, float deltaTime)
         {
             m_unit.EnterFollowing();
 
-            // 定期刷新槽位（1.5-3 秒随机间隔）
+            // 定期刷新槽位（2-4 秒随机间隔）
             m_slotRefreshTimer += deltaTime;
-            if (m_slotRefreshTimer >= SlotRefreshInterval)
+            if (m_slotRefreshTimer >= m_slotRefreshInterval)
             {
-                RefreshFollowSlot();
-                m_slotRefreshTimer = UnityEngine.Random.Range(-1.5f, 0f); // 随机化下次刷新时机
+                RefreshFollowSlot(false);
+                m_slotRefreshInterval = UnityEngine.Random.Range(SlotRefreshIntervalMin, SlotRefreshIntervalMax);
                 m_slotRefreshTimer = 0f;
             }
 
             // 尝试转为 Hunt：只有边缘僵尸（距玩家 > FollowMinRadius）且 Hunter 名额未满
-            if (distToPlayer > FollowMinRadius && s_activeHunterCount < MaxActiveHunters)
+            if (ShouldPromoteToHunt(distToPlayer))
             {
-                HumanUnit target = TryFindHuntTarget(selfPos, playerPos);
+                HumanUnit target = TryFindHuntTarget(selfPos, playerPos, true);
                 if (target != null)
                 {
                     RegisterHunter();
@@ -439,7 +480,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            HumanUnit target = TryFindHuntTarget(selfPos, playerPos);
+            HumanUnit target = TryFindHuntTarget(selfPos, playerPos, true);
             if (target == null)
             {
                 // 目标丢失，回到 Follow
@@ -467,10 +508,10 @@ namespace Game.Gameplay.Zombie
             m_unit.EnterFollowing();
 
             // 回到跟随范围后切换为 Follow
-            if (distToPlayer <= FollowMaxRadius)
+            if (distToPlayer <= ReturnExitDistance)
             {
                 m_swarmState = SwarmState.Follow;
-                RefreshFollowSlot();
+                RefreshFollowSlot(false);
                 return;
             }
 
@@ -486,7 +527,7 @@ namespace Game.Gameplay.Zombie
         /// <summary>
         /// 寻找可 Hunt 的目标：必须在感知范围内，且目标距玩家不超过 MaxHuntTargetDistFromPlayer。
         /// </summary>
-        private HumanUnit TryFindHuntTarget(Vector2 selfPos, Vector2 playerPos)
+        private HumanUnit TryFindHuntTarget(Vector2 selfPos, Vector2 playerPos, bool allowExtendedSearch = false)
         {
             if (m_getActiveHumans == null) return null;
 
@@ -497,6 +538,10 @@ namespace Game.Gameplay.Zombie
             if (m_sessionState != null)
             {
                 perceptionRadius = m_sessionState.GetZombiePerceptionRadius(perceptionRadius);
+            }
+            if (allowExtendedSearch)
+            {
+                perceptionRadius *= HuntTargetSearchMultiplier;
             }
 
             float sqrPerception = perceptionRadius * perceptionRadius;
@@ -530,7 +575,7 @@ namespace Game.Gameplay.Zombie
             return best;
         }
 
-        private void RefreshFollowSlot()
+        private void RefreshFollowSlot(bool countReassignment)
         {
             MapRuntimeController map = ResolveMapRuntimeController();
             Vector2 playerPos = m_playerTransform != null
@@ -556,13 +601,19 @@ namespace Game.Gameplay.Zombie
                 }
 
                 m_followSlotOffset = offset;
-                TotalReassignedSlotCount++;
+                if (countReassignment)
+                {
+                    TotalReassignedSlotCount++;
+                }
                 return;
             }
 
             // 所有尝试失败，使用玩家正后方作为安全方向
             m_followSlotOffset = new Vector2(0f, -FollowMinRadius);
-            TotalReassignedSlotCount++;
+            if (countReassignment)
+            {
+                TotalReassignedSlotCount++;
+            }
         }
 
         private void RegisterHunter()
@@ -583,29 +634,85 @@ namespace Game.Gameplay.Zombie
             }
         }
 
+        private void RegisterActiveAI()
+        {
+            if (!m_isRegisteredActiveAI)
+            {
+                m_isRegisteredActiveAI = true;
+                s_activeZombieAICount++;
+            }
+        }
+
+        private void UnregisterActiveAI()
+        {
+            if (m_isRegisteredActiveAI)
+            {
+                m_isRegisteredActiveAI = false;
+                s_activeZombieAICount = Mathf.Max(0, s_activeZombieAICount - 1);
+            }
+        }
+
+        private bool ShouldPromoteToHunt(float distToPlayer)
+        {
+            return distToPlayer >= HuntPromoteMinDistance &&
+                   s_activeHunterCount < CalculateTargetHunterCount();
+        }
+
+        private static int CalculateTargetHunterCount()
+        {
+            int activeCount = Mathf.Max(0, s_activeZombieAICount);
+            if (activeCount == 0)
+            {
+                return 0;
+            }
+
+            int target = s_isFinalFrenzyActive
+                ? Mathf.Clamp(Mathf.RoundToInt(activeCount * 0.23f), 12, 16)
+                : Mathf.Clamp(Mathf.RoundToInt(activeCount * 0.17f), 8, 12);
+            return Mathf.Min(activeCount, target);
+        }
+
         // ==================== 卡住检测与恢复 ====================
 
-        private void UpdateStuckDetection(Vector2 currentPos, float deltaTime)
+        private void UpdateStuckDetectionThrottled(Vector2 currentPos, float deltaTime)
         {
-            float movedDist = (currentPos - m_lastRecordedPos).magnitude;
+            if (!m_hasMoveRequestThisFrame)
+            {
+                m_stuckTimer = 0f;
+                m_stuckSampleTimer = 0f;
+                m_continuousStuckDuration = 0f;
+                m_consecutiveStuckCount = 0;
+                m_lastRecordedPos = currentPos;
+                return;
+            }
 
+            m_stuckSampleTimer += deltaTime;
+            if (m_stuckSampleTimer < StuckSampleInterval)
+            {
+                return;
+            }
+
+            float movedDist = (currentPos - m_lastRecordedPos).magnitude;
             if (movedDist < StuckMinMoveDist)
             {
-                m_stuckTimer += deltaTime;
+                m_stuckTimer += m_stuckSampleTimer;
+                m_continuousStuckDuration += m_stuckSampleTimer;
             }
             else
             {
                 m_stuckTimer = 0f;
+                m_continuousStuckDuration = 0f;
                 m_consecutiveStuckCount = 0;
             }
 
             m_lastRecordedPos = currentPos;
+            m_stuckSampleTimer = 0f;
 
-            // 卡住判定
-            if (m_stuckTimer >= StuckThreshold)
+            if (m_stuckTimer >= StuckThreshold &&
+                Time.time - m_lastStuckRecoveryTime >= StuckRecoveryCooldown)
             {
                 HandleStuckRecovery(currentPos);
-                m_stuckTimer = 0f;
+                m_lastStuckRecoveryTime = Time.time;
             }
         }
 
@@ -621,17 +728,17 @@ namespace Game.Gameplay.Zombie
                     // 放弃当前目标，切换到 Return
                     UnregisterHunter();
                     m_swarmState = SwarmState.Return;
-                    RefreshFollowSlot();
+                    RefreshFollowSlot(true);
                     break;
 
                 case SwarmState.Return:
                     // 重新选择一个不同方向的槽位
-                    RefreshFollowSlot();
+                    RefreshFollowSlot(true);
                     break;
 
                 case SwarmState.Follow:
                     // 重新分配槽位
-                    RefreshFollowSlot();
+                    RefreshFollowSlot(true);
                     break;
 
                 case SwarmState.Frenzy:
@@ -639,12 +746,12 @@ namespace Game.Gameplay.Zombie
                     m_rushRemainingTime = 0f;
                     RemoveRushVisual();
                     m_swarmState = SwarmState.Return;
-                    RefreshFollowSlot();
+                    RefreshFollowSlot(true);
                     break;
             }
 
             // 紧急传送：仅在极端条件下（连续卡住 5s+、距玩家 >18m、不在摄像机视野内）
-            if (m_consecutiveStuckCount >= 5)
+            if (m_continuousStuckDuration >= 5f)
             {
                 TryEmergencyTeleportIfSafe(currentPos);
             }
@@ -673,6 +780,11 @@ namespace Game.Gameplay.Zombie
 
             // 条件 2：不在摄像机视野内
             Camera cam = Camera.main;
+            if (cam == null)
+            {
+                TotalVisibleTeleportBlockedCount++;
+                return;
+            }
             if (cam != null)
             {
                 Vector3 viewportPos = cam.WorldToViewportPoint(new Vector3(currentPos.x, currentPos.y, 0f));
@@ -704,6 +816,8 @@ namespace Game.Gameplay.Zombie
                 m_swarmState = SwarmState.Follow;
                 m_followSlotOffset = candidate - playerPos;
                 m_consecutiveStuckCount = 0;
+                m_stuckTimer = 0f;
+                m_continuousStuckDuration = 0f;
                 m_lastTeleportTime = elapsed;
                 TotalEmergencyTeleportCount++;
                 return;
@@ -720,6 +834,7 @@ namespace Game.Gameplay.Zombie
         {
             // 对象池回收时释放 Hunter 名额
             UnregisterHunter();
+            UnregisterActiveAI();
         }
 
         // ==================== 内部辅助 ====================
@@ -814,6 +929,11 @@ namespace Game.Gameplay.Zombie
 
         private void MoveWithCollision(Vector2 currentPosition, Vector2 displacement)
         {
+            if (displacement.sqrMagnitude >= StuckMoveRequestMinDistance * StuckMoveRequestMinDistance)
+            {
+                m_hasMoveRequestThisFrame = true;
+            }
+
             Vector2 targetPosition = currentPosition + displacement;
             MapRuntimeController map = ResolveMapRuntimeController();
             if (map == null)

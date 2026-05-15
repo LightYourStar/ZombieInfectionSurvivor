@@ -235,7 +235,7 @@ namespace Game.Gameplay.Feedback
             int count = Mathf.Max(1, m_floatTextPoolSize);
             for (int i = 0; i < count; i++)
             {
-                GameObject go = new GameObject($"InfectionFloatText_{i}", typeof(TextMesh), typeof(MeshRenderer));
+                GameObject go = new GameObject($"InfectionFloatText_{i}", typeof(TextMesh));
                 go.transform.SetParent(transform, false);
 
                 TextMesh text = go.GetComponent<TextMesh>();

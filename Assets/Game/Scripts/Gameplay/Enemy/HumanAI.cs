@@ -154,16 +154,8 @@ namespace Game.Gameplay.Enemy
 
         /// <summary>
         /// 推进一帧 AI 行为：计算威胁、切换状态、按当前状态的方向移动。
-        /// 由 SpawnSystem / GameSystemRunner 统一调度，本组件不订阅 Unity 的 Update。
-        ///
-        /// 当以下任一条件不满足时方法提前返回：
-        /// <list type="bullet">
-        /// <item><see cref="Initialize"/> 未调用或传入了空的 <see cref="GameConfig"/>；</item>
-        /// <item><see cref="HumanUnit"/> 引用缺失或已被标记为感染（等待当帧回收）；</item>
-        /// <item><paramref name="deltaTime"/> 为非正数（暂停帧或时序异常）。</item>
-        /// </list>
         /// </summary>
-        /// <param name="deltaTime">本帧时间增量，通常为 <see cref="Time.deltaTime"/></param>
+        /// <param name="deltaTime">本帧时间增量</param>
         public void UpdateAI(float deltaTime)
         {
             if (m_config == null || m_unit == null || m_unit.IsInfected || deltaTime <= 0f)
@@ -173,10 +165,15 @@ namespace Game.Gameplay.Enemy
 
             Vector2 selfPos = m_unit.Position;
 
+            // 根据人类类型获取对应的感知半径和移动速度
+            Config.HumanTypeConfig typeConfig = m_config.GetHumanTypeConfig(m_unit.UnitType);
+            float perceptionRadius = typeConfig.PerceptionRadius;
+            float moveSpeed = typeConfig.MoveSpeed;
+
             // 1. 在感知半径内寻找距离最近的威胁源（玩家或僵尸同伴）
             bool hasThreat = TryFindNearestThreatWithinRadius(
                 selfPos,
-                m_config.HumanPerceptionRadius,
+                perceptionRadius,
                 out Vector2 nearestThreatPos);
 
             Vector2 moveDirection;
@@ -199,8 +196,8 @@ namespace Game.Gameplay.Enemy
                 moveDirection = CalculateWanderDirection();
             }
 
-            // 3. 应用位移：displacement = direction * humanMoveSpeed * deltaTime（direction 已为单位向量）
-            Vector2 displacement = moveDirection * (m_config.HumanMoveSpeed * deltaTime);
+            // 3. 应用位移
+            Vector2 displacement = moveDirection * (moveSpeed * deltaTime);
             Vector3 currentPosition = transform.position;
             transform.position = new Vector3(
                 currentPosition.x + displacement.x,

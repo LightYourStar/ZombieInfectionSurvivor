@@ -160,7 +160,7 @@ namespace Game.UI
             float lineHeight = 20f;
 
             // ===== 实时统计区 =====
-            int liveLineCount = 19;
+            int liveLineCount = 20;
             GUI.Box(new Rect(x - 6f, y - 6f, width + 12f, lineHeight * liveLineCount + 16f), string.Empty);
 
             GUI.Label(new Rect(x, y, width, lineHeight), "=== DEBUG STATS (F3) ===", m_headerStyle);
@@ -184,6 +184,18 @@ namespace Game.UI
             int bonusCap = actualCap - baseCap;
             GUI.Label(new Rect(x, y, width, lineHeight), $"僵尸: {activeZombieCountNow}/{actualCap} (基础{baseCap}+升级{bonusCap}) 最高:{m_maxObservedZombieCount}", m_labelStyle);
             y += lineHeight;
+
+            // 各类型僵尸数量
+            if (m_infectionSystem != null)
+            {
+                m_infectionSystem.GetZombieTypeCounts(out int normalZ, out int runnerZ, out int bruteZ);
+                GUI.Label(new Rect(x, y, width, lineHeight), $"  普通:{normalZ} 敏捷:{runnerZ} 强壮:{bruteZ}", m_labelStyle);
+                y += lineHeight;
+            }
+            else
+            {
+                y += lineHeight;
+            }
 
             int currentCombo = m_comboTracker != null ? m_comboTracker.CurrentCombo : 0;
             int maxCombo = m_comboTracker != null ? m_comboTracker.MaxCombo : 0;

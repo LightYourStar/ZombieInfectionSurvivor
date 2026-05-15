@@ -301,7 +301,22 @@ namespace Game.Gameplay.Wave
             Vector2 spawnPos = PickSpawnPosition();
             human.transform.position = new Vector3(spawnPos.x, spawnPos.y, 0f);
 
-            // 为取出的 Human 注入 AI 依赖：若缺少 HumanAI 组件只记录警告，不阻断刷新流程
+            // 分配人类类型（按权重随机）
+            if (m_config != null)
+            {
+                Enemy.HumanType humanType = m_config.PickRandomHumanType();
+                human.SetHumanType(humanType);
+
+                // 应用类型视觉（颜色）
+                SpriteRenderer sr = human.GetComponent<SpriteRenderer>();
+                if (sr != null)
+                {
+                    var typeConfig = m_config.GetHumanTypeConfig(humanType);
+                    sr.color = typeConfig.DisplayColor;
+                }
+            }
+
+            // 为取出的 Human 注入 AI 依赖
             HumanAI ai = human.GetComponent<HumanAI>();
             if (ai != null)
             {

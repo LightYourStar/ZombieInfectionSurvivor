@@ -11,28 +11,28 @@ using UnityEngine;
 namespace Game.Gameplay.Zombie
 {
     /// <summary>
-    /// 僵尸同伴 AI：感知范围内无 Human 目标时跟随玩家，有目标时追击距离最近的 Human。
-    /// 挂载在 ZombieCompanion 预制体根节点上，与 <see cref="ZombieCompanionUnit"/> 组件共存；
-    /// <see cref="ZombieCompanionUnit"/> 负责状态枚举与池生命周期，本组件负责每帧的行为决策与位移推进。
-    /// 数值参数（移动速度、感知范围）全部来自 <see cref="GameConfig"/>，不硬编码。
+    /// 僵尸同伴 AI：感知范围内�?Human 目标时跟随玩家，有目标时追击距离最近的 Human�?
+    /// 挂载�?ZombieCompanion 预制体根节点上，�?<see cref="ZombieCompanionUnit"/> 组件共存�?
+    /// <see cref="ZombieCompanionUnit"/> 负责状态枚举与池生命周期，本组件负责每帧的行为决策与位移推进�?
+    /// 数值参数（移动速度、感知范围）全部来自 <see cref="GameConfig"/>，不硬编码�?
     /// </summary>
     /// <remarks>
-    /// 依赖注入约定：
+    /// 依赖注入约定�?
     /// <list type="bullet">
-    /// <item><see cref="Initialize(GameConfig, Transform, Func{IReadOnlyList{HumanUnit}})"/> 由上层系统（通常是 InfectionSystem，
-    /// task 6.2）在每次从对象池取出 ZombieCompanion 后调用，传入 <see cref="GameConfig"/>、玩家 <see cref="Transform"/>
-    /// 以及一个惰性获取当前活跃 Human 列表的委托。</item>
+    /// <item><see cref="Initialize(GameConfig, Transform, Func{IReadOnlyList{HumanUnit}})"/> 由上层系统（通常�?InfectionSystem�?
+    /// task 6.2）在每次从对象池取出 ZombieCompanion 后调用，传入 <see cref="GameConfig"/>、玩�?<see cref="Transform"/>
+    /// 以及一个惰性获取当前活�?Human 列表的委托�?/item>
     /// <item>使用委托而非直接持有 Human 列表，可避免 ZombieCompanionAI 跨模块强持有 SpawnSystem 的内部集合，
-    /// 也便于上层按需缓存 / 过滤。</item>
-    /// <item>未调用 Initialize 或 <see cref="GameConfig"/> 为空时，<see cref="UpdateAI"/> 会安全跳过所有位移逻辑。</item>
+    /// 也便于上层按需缓存 / 过滤�?/item>
+    /// <item>未调�?Initialize �?<see cref="GameConfig"/> 为空时，<see cref="UpdateAI"/> 会安全跳过所有位移逻辑�?/item>
     /// </list>
     ///
-    /// 行为规则（对应 Requirements 6.1 ~ 6.3）：
+    /// 行为规则（对�?Requirements 6.1 ~ 6.3）：
     /// <list type="number">
-    /// <item>每帧遍历当前活跃 Human 列表，找出在感知半径内距离最近、且未被标记为感染的 Human。</item>
-    /// <item>若存在可追击目标：切换 <see cref="ZombieCompanionUnit"/> 为 Chasing 状态，沿 (targetPos - selfPos) 的归一化方向移动。</item>
-    /// <item>若不存在目标：切换为 Following 状态，沿玩家方向移动以保持跟随。</item>
-    /// <item>所有数值（感知半径、移动速度）均从 <see cref="GameConfig"/> 读取。</item>
+    /// <item>每帧遍历当前活跃 Human 列表，找出在感知半径内距离最近、且未被标记为感染的 Human�?/item>
+    /// <item>若存在可追击目标：切�?<see cref="ZombieCompanionUnit"/> �?Chasing 状态，�?(targetPos - selfPos) 的归一化方向移动�?/item>
+    /// <item>若不存在目标：切换为 Following 状态，沿玩家方向移动以保持跟随�?/item>
+    /// <item>所有数值（感知半径、移动速度）均�?<see cref="GameConfig"/> 读取�?/item>
     /// </list>
     /// </remarks>
     [RequireComponent(typeof(ZombieCompanionUnit))]
@@ -41,60 +41,60 @@ namespace Game.Gameplay.Zombie
         // ==================== Inspector 字段 ====================
 
         [Header("绑定")]
-        [Tooltip("同 GameObject 上的 ZombieCompanionUnit 引用；留空时 Awake 中自动通过 GetComponent 补齐")]
+        [Tooltip("�?GameObject 上的 ZombieCompanionUnit 引用；留空时 Awake 中自动通过 GetComponent 补齐")]
         [SerializeField] private ZombieCompanionUnit m_unit;
 
         [SerializeField] private MapRuntimeController m_mapRuntimeController;
 
         [SerializeField, Min(0f)] private float m_blockerClearance = 0.45f;
 
-        // ==================== 运行时依赖（由 Initialize 注入） ====================
+        // ==================== 运行时依赖（�?Initialize 注入�?====================
 
-        /// <summary>游戏全局配置，提供感知范围和移动速度等运行时数值</summary>
+        /// <summary>游戏全局配置，提供感知范围和移动速度等运行时数�?/summary>
         private GameConfig m_config;
 
         /// <summary>玩家 Transform，作为无目标时的跟随对象；为 null 时僵尸同伴在无目标情况下保持静止</summary>
         private Transform m_playerTransform;
 
-        /// <summary>当前局升级状态，提供感知范围和冲刺时间修正</summary>
+        /// <summary>当前局升级状态，提供感知范围和冲刺时间修�?/summary>
         private SessionUpgradeState m_sessionState;
 
         /// <summary>
-        /// 获取当前活跃 Human 列表的委托。
+        /// 获取当前活跃 Human 列表的委托�?
         /// 使用委托而非具体列表引用，可在上层（SpawnSystem / InfectionSystem）灵活维护集合（缓存、过滤等），
-        /// 同时避免 ZombieCompanionAI 直接引用刷怪系统的内部数据结构导致的跨模块耦合。
+        /// 同时避免 ZombieCompanionAI 直接引用刷怪系统的内部数据结构导致的跨模块耦合�?
         /// </summary>
         private Func<IReadOnlyList<HumanUnit>> m_getActiveHumans;
 
         private MapRuntimeController m_cachedMapRuntimeController;
 
-        // ==================== 尸潮行为状态 ====================
+        // ==================== 尸潮行为状�?====================
 
-        /// <summary>当前尸潮行为状态</summary>
+        /// <summary>当前尸潮行为状�?/summary>
         public enum SwarmState { Follow, Hunt, Return, Frenzy }
 
-        /// <summary>当前行为状态</summary>
+        /// <summary>当前行为状�?/summary>
         private SwarmState m_swarmState = SwarmState.Follow;
 
         /// <summary>跟随槽位偏移（相对于玩家位置的随机偏移）</summary>
         private Vector2 m_followSlotOffset;
 
-        /// <summary>槽位刷新计时器</summary>
+        /// <summary>槽位刷新计时�?/summary>
         private float m_slotRefreshTimer;
 
-        /// <summary>槽位刷新间隔（秒）</summary>
+        /// <summary>槽位刷新间隔（秒�?/summary>
         private float m_slotRefreshInterval;
 
         private const float SlotRefreshIntervalMin = 2f;
         private const float SlotRefreshIntervalMax = 4f;
 
-        /// <summary>跟随最小距离</summary>
+        /// <summary>跟随最小距�?/summary>
         private const float FollowMinRadius = 2f;
 
-        /// <summary>跟随最大距离</summary>
+        /// <summary>跟随最大距�?/summary>
         private const float FollowMaxRadius = 5.5f;
 
-        /// <summary>Hunt 最大脱离玩家距离，超过则 Return</summary>
+        /// <summary>Hunt 最大脱离玩家距离，超过�?Return</summary>
         private const float MaxDetachDistance = 16f;
 
         private const float ReturnExitDistance = 7f;
@@ -108,7 +108,7 @@ namespace Game.Gameplay.Zombie
         /// <summary>全局活跃 Hunter 计数（静态共享）</summary>
         private static int s_activeHunterCount;
 
-        /// <summary>全局活跃 Zombie AI 计数，用于按尸群规模计算 Hunt 目标数</summary>
+        /// <summary>全局活跃 Zombie AI 计数，用于按尸群规模计算 Hunt 目标�?/summary>
         private static int s_activeZombieAICount;
         private static bool s_isFinalFrenzyActive;
 
@@ -117,17 +117,17 @@ namespace Game.Gameplay.Zombie
 
         private bool m_isRegisteredActiveAI;
 
-        /// <summary>当前行为状态（供 Debug 读取）</summary>
+        /// <summary>当前行为状态（�?Debug 读取�?/summary>
         public SwarmState CurrentSwarmState => m_swarmState;
 
-        /// <summary>全局活跃 Hunter 数量（供 Debug 读取）</summary>
+        /// <summary>全局活跃 Hunter 数量（供 Debug 读取�?/summary>
         public static int ActiveHunterCount => s_activeHunterCount;
 
         public static int CurrentHuntTargetCount => CalculateTargetHunterCount();
 
-        // ==================== 卡住检测 ====================
+        // ==================== 卡住检�?====================
 
-        /// <summary>上一帧位置，用于检测移动距离</summary>
+        /// <summary>上一帧位置，用于检测移动距�?/summary>
         private Vector2 m_lastRecordedPos;
 
         /// <summary>卡住计时器（秒）</summary>
@@ -140,7 +140,7 @@ namespace Game.Gameplay.Zombie
         /// <summary>卡住判定阈值（秒）</summary>
         private const float StuckThreshold = 1.0f;
 
-        /// <summary>卡住判定最小移动距离</summary>
+        /// <summary>卡住判定最小移动距�?/summary>
         private const float StuckMinMoveDist = 0.2f;
 
         private const float StuckSampleInterval = 0.4f;
@@ -153,7 +153,7 @@ namespace Game.Gameplay.Zombie
         private float m_lastStuckRecoveryTime = -999f;
         private bool m_hasMoveRequestThisFrame;
 
-        /// <summary>紧急传送冷却时间</summary>
+        /// <summary>紧急传送冷却时�?/summary>
         private float m_lastTeleportTime = -999f;
 
         /// <summary>紧急传送最小间隔（秒）</summary>
@@ -162,16 +162,16 @@ namespace Game.Gameplay.Zombie
         /// <summary>是否当前被判定为卡住</summary>
         public bool IsStuck => m_continuousStuckDuration >= StuckThreshold;
 
-        /// <summary>全局卡住恢复计数（供 Debug）</summary>
+        /// <summary>全局卡住恢复计数（供 Debug�?/summary>
         public static int TotalStuckRecoveryCount { get; private set; }
 
-        /// <summary>全局槽位重分配计数（供 Debug）</summary>
+        /// <summary>全局槽位重分配计数（�?Debug�?/summary>
         public static int TotalReassignedSlotCount { get; private set; }
 
-        /// <summary>全局紧急传送计数（供 Debug）</summary>
+        /// <summary>全局紧急传送计数（�?Debug�?/summary>
         public static int TotalEmergencyTeleportCount { get; private set; }
 
-        /// <summary>重置全局 Debug 计数（新局开始时调用）</summary>
+        /// <summary>重置全局 Debug 计数（新局开始时调用�?/summary>
         public static void ResetGlobalDebugCounters()
         {
             s_activeHunterCount = 0;
@@ -191,15 +191,15 @@ namespace Game.Gameplay.Zombie
             s_isFinalFrenzyActive = true;
         }
 
-        // ==================== 新生冲刺状态 ====================
+        // ==================== 新生冲刺状�?====================
 
-        /// <summary>冲刺剩余时间（秒），> 0 时处于冲刺状态</summary>
+        /// <summary>冲刺剩余时间（秒），> 0 时处于冲刺状�?/summary>
         private float m_rushRemainingTime;
 
-        /// <summary>是否处于新生冲刺状态</summary>
+        /// <summary>是否处于新生冲刺状�?/summary>
         public bool IsRushing => m_rushRemainingTime > 0f;
 
-        /// <summary>冲刺视觉：缓存原始颜色用于恢复</summary>
+        /// <summary>冲刺视觉：缓存原始颜色用于恢�?/summary>
         private Color m_originalColor = Color.white;
 
         /// <summary>冲刺视觉：是否已应用冲刺视觉效果</summary>
@@ -211,7 +211,7 @@ namespace Game.Gameplay.Zombie
         // ==================== 生命周期 ====================
 
         /// <summary>
-        /// Awake 中自动补齐 <see cref="ZombieCompanionUnit"/> 引用，保证在 Initialize 之前也能安全访问单位自身状态。
+        /// Awake 中自动补�?<see cref="ZombieCompanionUnit"/> 引用，保证在 Initialize 之前也能安全访问单位自身状态�?
         /// </summary>
         private void Awake()
         {
@@ -221,16 +221,16 @@ namespace Game.Gameplay.Zombie
             }
         }
 
-        // ==================== 初始化 ====================
+        // ==================== 初始�?====================
 
         /// <summary>
-        /// 注入 AI 所需的运行时依赖。通常由 InfectionSystem 在从对象池取出 ZombieCompanion 后调用。
+        /// 注入 AI 所需的运行时依赖。通常�?InfectionSystem 在从对象池取�?ZombieCompanion 后调用�?
         /// </summary>
-        /// <param name="config">全局配置；为 null 时 AI 将进入「未初始化」状态，<see cref="UpdateAI"/> 直接跳过</param>
-        /// <param name="playerTransform">玩家 Transform；为 null 时表示无跟随目标，无目标情况下僵尸同伴保持静止</param>
+        /// <param name="config">全局配置；为 null �?AI 将进入「未初始化」状态，<see cref="UpdateAI"/> 直接跳过</param>
+        /// <param name="playerTransform">玩家 Transform；为 null 时表示无跟随目标，无目标情况下僵尸同伴保持静�?/param>
         /// <param name="getActiveHumans">
-        /// 获取当前活跃 Human 列表的惰性委托；为 null 时视作当前无可追击目标，僵尸同伴只会执行跟随行为。
-        /// 委托每帧被调用一次，调用方应保证其轻量（建议返回已缓存列表的只读视图）。
+        /// 获取当前活跃 Human 列表的惰性委托；�?null 时视作当前无可追击目标，僵尸同伴只会执行跟随行为�?
+        /// 委托每帧被调用一次，调用方应保证其轻量（建议返回已缓存列表的只读视图）�?
         /// </param>
         public void Initialize(GameConfig config, Transform playerTransform, Func<IReadOnlyList<HumanUnit>> getActiveHumans, SessionUpgradeState sessionState = null)
         {
@@ -245,17 +245,17 @@ namespace Game.Gameplay.Zombie
             m_sessionState = sessionState;
             RegisterActiveAI();
 
-            // 重置冲刺状态（对象池复用时清理残留）
+            // 重置冲刺状态（对象池复用时清理残留�?
             m_rushRemainingTime = 0f;
 
-            // 初始化尸潮状态
+            // 初始化尸潮状�?
             UnregisterHunter();
             m_swarmState = SwarmState.Follow;
             RefreshFollowSlot(false);
             m_slotRefreshInterval = UnityEngine.Random.Range(SlotRefreshIntervalMin, SlotRefreshIntervalMax);
             m_slotRefreshTimer = UnityEngine.Random.Range(0f, m_slotRefreshInterval);
 
-            // 重置卡住检测
+            // 重置卡住检�?
             m_stuckTimer = 0f;
             m_stuckSampleTimer = 0f;
             m_continuousStuckDuration = 0f;
@@ -264,9 +264,34 @@ namespace Game.Gameplay.Zombie
             m_lastRecordedPos = m_unit != null ? m_unit.Position : Vector2.zero;
         }
 
+        // ==================== 类型化属性辅�?====================
+
         /// <summary>
-        /// 启动新生冲刺。由 InfectionSystem 在生成新 ZombieCompanion 后调用。
-        /// 冲刺期间移动速度乘以倍率，优先朝最近 Human 移动。
+        /// 获取当前僵尸类型对应的移动速度�?
+        /// 优先�?GameConfig 的类型配置中读取，兜底使用全局 ZombieCompanionSpeed�?
+        /// </summary>
+        private float GetTypedSpeed()
+        {
+            if (m_config == null) return 3.2f;
+            if (m_unit == null) return GetTypedSpeed();
+            var typeConfig = m_config.GetZombieTypeConfig(m_unit.UnitType);
+            return typeConfig.MoveSpeed;
+        }
+
+        /// <summary>
+        /// 获取当前僵尸类型对应的感知范围�?
+        /// </summary>
+        private float GetTypedPerceptionRadius()
+        {
+            if (m_config == null) return 3.75f;
+            if (m_unit == null) return GetTypedPerceptionRadius();
+            var typeConfig = m_config.GetZombieTypeConfig(m_unit.UnitType);
+            return typeConfig.PerceptionRadius;
+        }
+
+        /// <summary>
+        /// 启动新生冲刺。由 InfectionSystem 在生成新 ZombieCompanion 后调用�?
+        /// 冲刺期间移动速度乘以倍率，优先朝最�?Human 移动�?
         /// </summary>
         public void StartNewbornRush()
         {
@@ -283,19 +308,19 @@ namespace Game.Gameplay.Zombie
             ApplyRushVisual();
         }
 
-        // ==================== 公开纯函数 ====================
+        // ==================== 公开纯函�?====================
 
         /// <summary>
-        /// 从候选 Human 集合中选择距离 <paramref name="selfPos"/> 最近、且未被标记为感染的那一个。
-        /// 对应设计文档 Property 10：返回的 Human 应是（合法）集合中与 Z 距离最小的那个。
+        /// 从候�?Human 集合中选择距离 <paramref name="selfPos"/> 最近、且未被标记为感染的那一个�?
+        /// 对应设计文档 Property 10：返回的 Human 应是（合法）集合中与 Z 距离最小的那个�?
         /// </summary>
-        /// <param name="selfPos">僵尸同伴自身的二维位置</param>
-        /// <param name="candidates">候选 Human 集合；为 null 或空时返回 null</param>
-        /// <returns>距离最近且未被感染的 Human；无合法候选时返回 null</returns>
+        /// <param name="selfPos">僵尸同伴自身的二维位�?/param>
+        /// <param name="candidates">候�?Human 集合；为 null 或空时返�?null</param>
+        /// <returns>距离最近且未被感染�?Human；无合法候选时返回 null</returns>
         /// <remarks>
         /// 实现上未直接调用 <see cref="MathUtils.FindNearest{T}"/>，因为本方法需要在遍历时同时过滤掉
-        /// <see cref="HumanUnit.IsInfected"/> 为 true 的候选（当帧即将被 InfectionSystem 回收的单位）。
-        /// 单次 for 循环可以一次性完成过滤 + 最近查找，避免额外列表分配。
+        /// <see cref="HumanUnit.IsInfected"/> �?true 的候选（当帧即将�?InfectionSystem 回收的单位）�?
+        /// 单次 for 循环可以一次性完成过�?+ 最近查找，避免额外列表分配�?
         /// </remarks>
         public HumanUnit FindNearestTarget(Vector2 selfPos, IReadOnlyList<HumanUnit> candidates)
         {
@@ -333,13 +358,13 @@ namespace Game.Gameplay.Zombie
         }
 
         /// <summary>
-        /// 计算从 <paramref name="selfPos"/> 指向 <paramref name="targetPos"/> 的归一化移动方向。
+        /// 计算�?<paramref name="selfPos"/> 指向 <paramref name="targetPos"/> 的归一化移动方向�?
         /// </summary>
         /// <param name="selfPos">僵尸同伴自身位置</param>
-        /// <param name="targetPos">目标位置（玩家或 Human）</param>
+        /// <param name="targetPos">目标位置（玩家或 Human�?/param>
         /// <returns>
-        /// 归一化的朝向向量；当两点位置重合（<c>selfPos == targetPos</c>）时无法确定方向，
-        /// 返回 <see cref="Vector2.zero"/> 表示本帧不位移，避免产生 NaN。
+        /// 归一化的朝向向量；当两点位置重合�?c>selfPos == targetPos</c>）时无法确定方向�?
+        /// 返回 <see cref="Vector2.zero"/> 表示本帧不位移，避免产生 NaN�?
         /// </returns>
         public Vector2 CalculateMoveDirection(Vector2 selfPos, Vector2 targetPos)
         {
@@ -355,17 +380,17 @@ namespace Game.Gameplay.Zombie
         // ==================== 每帧更新 ====================
 
         /// <summary>
-        /// 推进一帧 AI 行为：在感知范围内寻找最近 Human，有则追击、无则跟随玩家，并应用位移。
-        /// 由 GameSystemRunner / 上层系统统一调度，本组件不订阅 Unity 的 Update。
+        /// 推进一�?AI 行为：在感知范围内寻找最�?Human，有则追击、无则跟随玩家，并应用位移�?
+        /// �?GameSystemRunner / 上层系统统一调度，本组件不订�?Unity �?Update�?
         ///
-        /// 当以下任一条件不满足时方法提前返回：
+        /// 当以下任一条件不满足时方法提前返回�?
         /// <list type="bullet">
-        /// <item><see cref="Initialize"/> 未调用或传入了空的 <see cref="GameConfig"/>；</item>
-        /// <item><see cref="ZombieCompanionUnit"/> 引用缺失；</item>
-        /// <item><paramref name="deltaTime"/> 为非正数（暂停帧或时序异常）。</item>
+        /// <item><see cref="Initialize"/> 未调用或传入了空�?<see cref="GameConfig"/>�?/item>
+        /// <item><see cref="ZombieCompanionUnit"/> 引用缺失�?/item>
+        /// <item><paramref name="deltaTime"/> 为非正数（暂停帧或时序异常）�?/item>
         /// </list>
         /// </summary>
-        /// <param name="deltaTime">本帧时间增量，通常为 <see cref="Time.deltaTime"/></param>
+        /// <param name="deltaTime">本帧时间增量，通常�?<see cref="Time.deltaTime"/></param>
         public void UpdateAI(float deltaTime)
         {
             if (m_config == null || m_unit == null || deltaTime <= 0f)
@@ -376,7 +401,7 @@ namespace Game.Gameplay.Zombie
             Vector2 selfPos = m_unit.Position;
             m_hasMoveRequestThisFrame = false;
 
-            // 新生冲刺（Frenzy）状态处理
+            // 新生冲刺（Frenzy）状态处�?
             if (m_rushRemainingTime > 0f)
             {
                 m_swarmState = SwarmState.Frenzy;
@@ -399,7 +424,7 @@ namespace Game.Gameplay.Zombie
 
             float distToPlayer = (selfPos - playerPos).magnitude;
 
-            // Return 检查：距离玩家太远则强制返回
+            // Return 检查：距离玩家太远则强制返�?
             if (distToPlayer > MaxDetachDistance && m_swarmState != SwarmState.Return)
             {
                 UnregisterHunter();
@@ -420,7 +445,7 @@ namespace Game.Gameplay.Zombie
                     break;
             }
 
-            // 卡住检测（在状态更新后执行）
+            // 卡住检测（在状态更新后执行�?
             UpdateStuckDetectionThrottled(m_unit.Position, deltaTime);
         }
 
@@ -428,7 +453,7 @@ namespace Game.Gameplay.Zombie
         {
             m_unit.EnterFollowing();
 
-            // 定期刷新槽位（2-4 秒随机间隔）
+            // 定期刷新槽位�?-4 秒随机间隔）
             m_slotRefreshTimer += deltaTime;
             if (m_slotRefreshTimer >= m_slotRefreshInterval)
             {
@@ -437,7 +462,7 @@ namespace Game.Gameplay.Zombie
                 m_slotRefreshTimer = 0f;
             }
 
-            // 尝试转为 Hunt：只有边缘僵尸（距玩家 > FollowMinRadius）且 Hunter 名额未满
+            // 尝试转为 Hunt：只有边缘僵尸（距玩�?> FollowMinRadius）且 Hunter 名额未满
             if (ShouldPromoteToHunt(distToPlayer))
             {
                 HumanUnit target = TryFindHuntTarget(selfPos, playerPos, true);
@@ -450,7 +475,7 @@ namespace Game.Gameplay.Zombie
                 }
             }
 
-            // 朝跟随槽位移动
+            // 朝跟随槽位移�?
             Vector2 slotTarget = playerPos + m_followSlotOffset;
             float sqrDistToSlot = (slotTarget - selfPos).sqrMagnitude;
             float stopDist = 0.8f;
@@ -464,7 +489,7 @@ namespace Game.Gameplay.Zombie
             }
 
             Vector2 moveDir = CalculateMoveDirection(selfPos, slotTarget);
-            Vector2 displacement = moveDir * (m_config.ZombieCompanionSpeed * deltaTime);
+            Vector2 displacement = moveDir * (GetTypedSpeed() * deltaTime);
             MoveWithCollision(selfPos, displacement);
         }
 
@@ -472,7 +497,7 @@ namespace Game.Gameplay.Zombie
         {
             m_unit.EnterChasing();
 
-            // 检查是否应该放弃 Hunt
+            // 检查是否应该放�?Hunt
             if (distToPlayer > MaxDetachDistance)
             {
                 UnregisterHunter();
@@ -483,7 +508,7 @@ namespace Game.Gameplay.Zombie
             HumanUnit target = TryFindHuntTarget(selfPos, playerPos, true);
             if (target == null)
             {
-                // 目标丢失，回到 Follow
+                // 目标丢失，回�?Follow
                 UnregisterHunter();
                 m_swarmState = SwarmState.Follow;
                 return;
@@ -495,11 +520,11 @@ namespace Game.Gameplay.Zombie
 
             if (sqrDistToTarget <= stopDist * stopDist)
             {
-                return; // 感染系统会处理转化
+                return; // 感染系统会处理转�?
             }
 
             Vector2 moveDir = CalculateMoveDirection(selfPos, targetPos);
-            Vector2 displacement = moveDir * (m_config.ZombieCompanionSpeed * deltaTime);
+            Vector2 displacement = moveDir * (GetTypedSpeed() * deltaTime);
             MoveWithCollision(selfPos, displacement);
         }
 
@@ -515,17 +540,17 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            // 朝跟随槽位移动（不是玩家中心）
+            // 朝跟随槽位移动（不是玩家中心�?
             Vector2 slotTarget = playerPos + m_followSlotOffset;
             Vector2 moveDir = CalculateMoveDirection(selfPos, slotTarget);
-            // Return 时稍快一点追上
-            float returnSpeed = m_config.ZombieCompanionSpeed * 1.3f;
+            // Return 时稍快一点追�?
+            float returnSpeed = GetTypedSpeed() * 1.3f;
             Vector2 displacement = moveDir * (returnSpeed * deltaTime);
             MoveWithCollision(selfPos, displacement);
         }
 
         /// <summary>
-        /// 寻找可 Hunt 的目标：必须在感知范围内，且目标距玩家不超过 MaxHuntTargetDistFromPlayer。
+        /// 寻找�?Hunt 的目标：必须在感知范围内，且目标距玩家不超过 MaxHuntTargetDistFromPlayer�?
         /// </summary>
         private HumanUnit TryFindHuntTarget(Vector2 selfPos, Vector2 playerPos, bool allowExtendedSearch = false)
         {
@@ -534,7 +559,7 @@ namespace Game.Gameplay.Zombie
             IReadOnlyList<HumanUnit> activeHumans = m_getActiveHumans();
             if (activeHumans == null || activeHumans.Count == 0) return null;
 
-            float perceptionRadius = m_config.ZombieCompanionPerceptionRadius;
+            float perceptionRadius = GetTypedPerceptionRadius();
             if (m_sessionState != null)
             {
                 perceptionRadius = m_sessionState.GetZombiePerceptionRadius(perceptionRadius);
@@ -582,7 +607,7 @@ namespace Game.Gameplay.Zombie
                 ? new Vector2(m_playerTransform.position.x, m_playerTransform.position.y)
                 : Vector2.zero;
 
-            // 尝试最多 10 次找到安全槽位
+            // 尝试最�?10 次找到安全槽�?
             for (int attempt = 0; attempt < 10; attempt++)
             {
                 float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
@@ -590,7 +615,7 @@ namespace Game.Gameplay.Zombie
                 Vector2 offset = new Vector2(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius);
                 Vector2 worldPos = playerPos + offset;
 
-                // 安全检查：不在阻挡内
+                // 安全检查：不在阻挡�?
                 if (map != null)
                 {
                     worldPos = map.ClampToMap(worldPos, m_blockerClearance);
@@ -608,7 +633,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            // 所有尝试失败，使用玩家正后方作为安全方向
+            // 所有尝试失败，使用玩家正后方作为安全方�?
             m_followSlotOffset = new Vector2(0f, -FollowMinRadius);
             if (countReassignment)
             {
@@ -721,7 +746,7 @@ namespace Game.Gameplay.Zombie
             m_consecutiveStuckCount++;
             TotalStuckRecoveryCount++;
 
-            // 按状态处理：只重分配目标/切换状态，不直接移动位置
+            // 按状态处理：只重分配目标/切换状态，不直接移动位�?
             switch (m_swarmState)
             {
                 case SwarmState.Hunt:
@@ -758,8 +783,8 @@ namespace Game.Gameplay.Zombie
         }
 
         /// <summary>
-        /// 紧急传送：仅在僵尸不在摄像机视野内、距玩家超过 18m 时才允许。
-        /// 避免玩家看到僵尸瞬移。
+        /// 紧急传送：仅在僵尸不在摄像机视野内、距玩家超过 18m 时才允许�?
+        /// 避免玩家看到僵尸瞬移�?
         /// </summary>
         private void TryEmergencyTeleportIfSafe(Vector2 currentPos)
         {
@@ -778,7 +803,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            // 条件 2：不在摄像机视野内
+            // 条件 2：不在摄像机视野�?
             Camera cam = Camera.main;
             if (cam == null)
             {
@@ -798,7 +823,7 @@ namespace Game.Gameplay.Zombie
                 }
             }
 
-            // 执行传送
+            // 执行传�?
             MapRuntimeController map = ResolveMapRuntimeController();
             for (int i = 0; i < 8; i++)
             {
@@ -823,11 +848,11 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            // 所有尝试失败，不传送，等下一次
+            // 所有尝试失败，不传送，等下一�?
             TotalVisibleTeleportBlockedCount++;
         }
 
-        /// <summary>全局：因在视野内而被阻止传送的次数（供 Debug）</summary>
+        /// <summary>全局：因在视野内而被阻止传送的次数（供 Debug�?/summary>
         public static int TotalVisibleTeleportBlockedCount { get; private set; }
 
         private void OnDisable()
@@ -840,12 +865,12 @@ namespace Game.Gameplay.Zombie
         // ==================== 内部辅助 ====================
 
         /// <summary>
-        /// 新生冲刺行为：以加速倍率朝最近 Human 移动。
-        /// 如果没有目标则朝玩家方向冲刺，都没有则冲刺提前结束。
+        /// 新生冲刺行为：以加速倍率朝最�?Human 移动�?
+        /// 如果没有目标则朝玩家方向冲刺，都没有则冲刺提前结束�?
         /// </summary>
         private void UpdateRushBehavior(Vector2 selfPos, float deltaTime)
         {
-            // 寻找最近 Human（不限感知范围，冲刺期间全图搜索最近目标）
+            // 寻找最�?Human（不限感知范围，冲刺期间全图搜索最近目标）
             HumanUnit rushTarget = null;
             if (m_getActiveHumans != null)
             {
@@ -864,7 +889,7 @@ namespace Game.Gameplay.Zombie
             }
             else if (m_playerTransform != null)
             {
-                // 无目标时朝玩家方向冲刺
+                // 无目标时朝玩家方向冲�?
                 m_unit.EnterFollowing();
                 Vector2 playerPos = new Vector2(m_playerTransform.position.x, m_playerTransform.position.y);
                 moveDirection = CalculateMoveDirection(selfPos, playerPos);
@@ -880,18 +905,18 @@ namespace Game.Gameplay.Zombie
             }
 
             // 冲刺速度 = 基础速度 * 倍率
-            float rushSpeed = m_config.ZombieCompanionSpeed * m_config.NewbornRushSpeedMultiplier;
+            float rushSpeed = GetTypedSpeed() * m_config.NewbornRushSpeedMultiplier;
             Vector2 displacement = moveDirection * (rushSpeed * deltaTime);
             MoveWithCollision(selfPos, displacement);
         }
 
         /// <summary>
-        /// 从当前活跃 Human 列表中找到距离 <paramref name="selfPos"/> 最近、且位于感知半径内、且未被感染的 Human。
+        /// 从当前活�?Human 列表中找到距�?<paramref name="selfPos"/> 最近、且位于感知半径内、且未被感染�?Human�?
         /// 使用 <see cref="FindNearestTarget"/> 拿到全局最近候选后，再通过 <see cref="MathUtils.IsWithinRange"/>
-        /// 进行严格小于半径的范围校验（语义与设计文档 Property 7 保持一致）。
+        /// 进行严格小于半径的范围校验（语义与设计文�?Property 7 保持一致）�?
         /// </summary>
         /// <param name="selfPos">僵尸同伴自身位置</param>
-        /// <returns>感知半径内的最近 Human；无合法目标时返回 null</returns>
+        /// <returns>感知半径内的最�?Human；无合法目标时返�?null</returns>
         private HumanUnit TryFindTargetWithinPerception(Vector2 selfPos)
         {
             if (m_getActiveHumans == null)
@@ -912,7 +937,7 @@ namespace Game.Gameplay.Zombie
             }
 
             // 范围判定单独一步，避免把感知半径耦合进纯函数 FindNearestTarget
-            float perceptionRadius = m_config.ZombieCompanionPerceptionRadius;
+            float perceptionRadius = GetTypedPerceptionRadius();
             if (m_sessionState != null)
             {
                 perceptionRadius = m_sessionState.GetZombiePerceptionRadius(perceptionRadius);
@@ -941,7 +966,7 @@ namespace Game.Gameplay.Zombie
                 if (!m_mapNullWarningLogged)
                 {
                     m_mapNullWarningLogged = true;
-                    Debug.LogWarning("[ZombieCompanionAI] MapRuntimeController 未找到，僵尸将无视地形碰撞。请确保场景中存在 MapRuntimeController。");
+                    Debug.LogWarning("[ZombieCompanionAI] MapRuntimeController 未找到，僵尸将无视地形碰撞。请确保场景中存在 MapRuntimeController");
                 }
                 ApplyWorldPosition(targetPosition);
                 return;
@@ -959,7 +984,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            // X 轴分量
+            // X 轴分�?
             Vector2 xOnlyTarget = map.ClampToMap(new Vector2(currentPosition.x + displacement.x, currentPosition.y), clearance);
             if (!map.IsPointBlocked(xOnlyTarget, clearance) &&
                 map.HasDirectPath(clampedCurrent, xOnlyTarget, clearance))
@@ -968,7 +993,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            // Y 轴分量
+            // Y 轴分�?
             Vector2 yOnlyTarget = map.ClampToMap(new Vector2(currentPosition.x, currentPosition.y + displacement.y), clearance);
             if (!map.IsPointBlocked(yOnlyTarget, clearance) &&
                 map.HasDirectPath(clampedCurrent, yOnlyTarget, clearance))
@@ -977,7 +1002,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            // 侧向脱困：尝试垂直于移动方向的左右偏移
+            // 侧向脱困：尝试垂直于移动方向的左右偏�?
             float mag = displacement.magnitude;
             if (mag > Mathf.Epsilon)
             {
@@ -1002,7 +1027,7 @@ namespace Game.Gameplay.Zombie
                 }
             }
 
-            // 所有方向都被阻挡，保持原位（等待卡住检测重分配目标）
+            // 所有方向都被阻挡，保持原位（等待卡住检测重分配目标�?
             ApplyWorldPosition(clampedCurrent);
         }
 
@@ -1029,13 +1054,13 @@ namespace Game.Gameplay.Zombie
 
         // ==================== 冲刺视觉反馈 ====================
 
-        /// <summary>MaterialPropertyBlock 复用实例，避免每帧分配</summary>
+        /// <summary>MaterialPropertyBlock 复用实例，避免每帧分�?/summary>
         private MaterialPropertyBlock m_propBlock;
 
         private static readonly int s_colorPropertyId = Shader.PropertyToID("_Color");
 
         /// <summary>
-        /// 应用冲刺视觉效果：使用 MaterialPropertyBlock 修改颜色，不污染共享材质。
+        /// 应用冲刺视觉效果：使�?MaterialPropertyBlock 修改颜色，不污染共享材质�?
         /// </summary>
         private void ApplyRushVisual()
         {
@@ -1044,7 +1069,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            // SpriteRenderer：直接修改 color 属性（SpriteRenderer 不共享材质颜色）
+            // SpriteRenderer：直接修�?color 属性（SpriteRenderer 不共享材质颜色）
             SpriteRenderer sr = GetComponent<SpriteRenderer>();
             if (sr != null)
             {
@@ -1054,7 +1079,7 @@ namespace Game.Gameplay.Zombie
                 return;
             }
 
-            // MeshRenderer：使用 MaterialPropertyBlock，不创建材质实例，不污染共享材质
+            // MeshRenderer：使�?MaterialPropertyBlock，不创建材质实例，不污染共享材质
             MeshRenderer mr = GetComponent<MeshRenderer>();
             if (mr != null)
             {
@@ -1063,7 +1088,7 @@ namespace Game.Gameplay.Zombie
                     m_propBlock = new MaterialPropertyBlock();
                 }
                 mr.GetPropertyBlock(m_propBlock);
-                // 读取当前颜色作为原始颜色（PropertyBlock 为空时取材质颜色）
+                // 读取当前颜色作为原始颜色（PropertyBlock 为空时取材质颜色�?
                 m_originalColor = mr.sharedMaterial != null ? mr.sharedMaterial.color : Color.white;
                 m_propBlock.SetColor(s_colorPropertyId, s_rushColor);
                 mr.SetPropertyBlock(m_propBlock);
@@ -1072,7 +1097,7 @@ namespace Game.Gameplay.Zombie
         }
 
         /// <summary>
-        /// 移除冲刺视觉效果，恢复原始颜色。
+        /// 移除冲刺视觉效果，恢复原始颜色�?
         /// </summary>
         private void RemoveRushVisual()
         {

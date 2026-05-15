@@ -1173,6 +1173,13 @@ namespace Game.Gameplay.Wave
                 // 设置生成保护时间，防止同帧生成同帧感染
                 human.SetSpawnGrace(0.3f);
 
+                // 分配人类类型（按权重随机）
+                Game.Gameplay.Enemy.HumanType humanType = m_config.PickRandomHumanType();
+                human.SetHumanType(humanType);
+
+                // 应用类型视觉（颜色）
+                ApplyHumanTypeVisual(human, humanType);
+
                 // 为取出的 Human 注入 AI 依赖
                 HumanAI ai = human.GetComponent<HumanAI>();
                 if (ai != null)
@@ -1790,6 +1797,23 @@ namespace Game.Gameplay.Wave
         /// <summary>
         /// 校验关键依赖是否已通过 Inspector 注入。
         /// </summary>
+        // ==================== 类型视觉辅助 ====================
+
+        /// <summary>
+        /// 为人类应用类型对应的视觉效果（颜色）。
+        /// </summary>
+        private void ApplyHumanTypeVisual(HumanUnit human, Game.Gameplay.Enemy.HumanType type)
+        {
+            if (human == null || m_config == null) return;
+
+            var typeConfig = m_config.GetHumanTypeConfig(type);
+            SpriteRenderer sr = human.GetComponent<SpriteRenderer>();
+            if (sr != null)
+            {
+                sr.color = typeConfig.DisplayColor;
+            }
+        }
+
         private bool ValidateDependencies()
         {
             if (m_poolManager == null)

@@ -209,7 +209,6 @@ namespace Game.Gameplay.Infection
             {
                 return false;
             }
-            // 已被标记为感染的 Human 不重复处理（防止同一波中重复 TryInfect 同一目标）
             if (human.IsInfected)
             {
                 return false;
@@ -220,8 +219,22 @@ namespace Game.Gameplay.Infection
                 return false;
             }
 
-            // 先缓存位置，标记后 Human 即将被回收，位置可能被重置
+            // 感染抵抗检查：Guard 类型有短暂抗感染时间
+            if (m_config != null)
+            {
+                var humanTypeConfig = m_config.GetHumanTypeConfig(human.UnitType);
+                if (humanTypeConfig.InfectionResistDuration > 0f)
+                {
+                    if (human.TryTriggerResist(humanTypeConfig.InfectionResistDuration))
+                    {
+                        return false; // 正在抵抗，本次感染失败
+                    }
+                }
+            }
+
+            // 先缓存位置和类型，标记后 Human 即将被回收
             Vector2 pos = human.Position;
+            HumanType humanType = human.UnitType;
 
             human.MarkInfected();
 
@@ -301,6 +314,14 @@ namespace Game.Gameplay.Infection
 
             // 保留原 Prefab 的 Z 轴（2D 场景一般为 0）；显式写入以避免继承到错误深度
             zombie.transform.position = new Vector3(pos.x, pos.y, 0f);
+
+            // 设置僵尸类型（根据人类类型映射）
+            ZombieType zombieType = GameConfig.GetConvertedZombieType(humanType);
+            zombie.SetZombieType(zombieType);
+
+            // 应用类型视觉（颜色和缩放）
+            ApplyZombieTypeVisual(zombie, zombieType);
+
             m_activeZombies.Add(zombie);
 
             // 为新生成的 ZombieCompanion 注入 AI 依赖
@@ -373,7 +394,14 @@ namespace Game.Gameplay.Infection
                     {
                         continue;
                     }
-                    if (IsInInfectionRange(human.Position, zombie.Position, radius))
+                    // BruteZombie 有更大的感染半径
+                    float zombieRadius = radius;
+                    if (m_config != null)
+                    {
+                        var ztConfig = m_config.GetZombieTypeConfig(zombie.UnitType);
+                        zombieRadius = radius * ztConfig.InfectionRadiusMultiplier;
+                    }
+                    if (IsInInfectionRange(human.Position, zombie.Position, zombieRadius))
                     {
                         m_pendingInfectionBuffer.Add(human);
                         break;
@@ -794,6 +822,51 @@ namespace Game.Gameplay.Infection
             int mixed = a.GetInstanceID() * 486187739 ^ b.GetInstanceID() * 16777619;
             float angle = Mathf.Abs(mixed % 360) * Mathf.Deg2Rad;
             return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+        }
+
+        // ==================== 类型视觉辅助 ====================
+
+        /// <summary>
+        /// 为僵尸应用类型对应的视觉效果（颜色和缩放）。
+        /// </summary>
+        private void ApplyZombieTypeVisual(ZombieCompanionUnit zombie, ZombieType type)
+        {
+            if (zombie == null || m_config == null) return;
+
+            var typeConfig = m_config.GetZombieTypeConfig(type);
+
+            // 应用缩放
+            zombie.transform.localScale = Vector3.one * typeConfig.ScaleMultiplier;
+
+            // 应用颜色
+            SpriteRenderer sr = zombie.GetComponent<SpriteRenderer>();
+            if (sr != null)
+            {
+                sr.color = typeConfig.DisplayColor;
+            }
+        }
+
+        /// <summary>
+        /// 获取各类型僵尸的数量统计。
+        /// </summary>
+        public void GetZombieTypeCounts(out int normalCount, out int runnerCount, out int bruteCount)
+        {
+            normalCount = 0;
+            runnerCount = 0;
+            bruteCount = 0;
+
+            for (int i = 0; i < m_activeZombies.Count; i++)
+            {
+                ZombieCompanionUnit zombie = m_activeZombies[i];
+                if (zombie == null || !zombie.gameObject.activeInHierarchy) continue;
+
+                switch (zombie.UnitType)
+                {
+                    case ZombieType.Normal: normalCount++; break;
+                    case ZombieType.Runner: runnerCount++; break;
+                    case ZombieType.Brute: bruteCount++; break;
+                }
+            }
         }
     }
 }

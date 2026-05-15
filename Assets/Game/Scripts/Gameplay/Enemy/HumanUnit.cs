@@ -20,38 +20,43 @@ namespace Game.Gameplay.Enemy
     /// 人类单位组件。
     /// 挂载在 Human 预制体根节点上，负责承载 Human 的运行时状态（当前行为状态、是否已被感染）
     /// 以及对象池激活/回收时的状态重置。
-    /// 具体的移动与感知逻辑由 <see cref="HumanAI"/>（task 5.2）实现；数值参数由 <c>GameConfig</c> 统一管理，本组件自身不读取配置。
     /// </summary>
-    /// <remarks>
-    /// 与 <c>ObjectPoolManager</c> 的协作约定：
-    /// <list type="bullet">
-    /// <item>对象池 <c>Get()</c> 会激活 GameObject，触发 <see cref="OnEnable"/>，在此统一 <see cref="ResetState"/>，保证每次取出都是干净状态。</item>
-    /// <item>对象池 <c>Return()</c> 会禁用 GameObject，触发 <see cref="OnDisable"/>，此时不需要额外清理逻辑（无外部订阅）。</item>
-    /// <item>InfectionSystem 在距离判定通过后调用 <see cref="MarkInfected"/>，随后立即将本单位归还池；状态枚举中的 Infected 仅作为一帧内的标记。</item>
-    /// </list>
-    /// </remarks>
     public class HumanUnit : MonoBehaviour
     {
         // ==================== 运行时状态 ====================
 
-        /// <summary>当前行为状态；私有 set 保证仅能通过本组件公开方法变更，避免外部随意写坏状态</summary>
+        /// <summary>当前行为状态</summary>
         private HumanState m_currentState = HumanState.Wandering;
 
         /// <summary>生成保护时间剩余（秒），> 0 时不参与感染判定</summary>
         private float m_spawnGraceRemaining;
 
+        /// <summary>人类类型（运行时由生成系统设置）</summary>
+        private HumanType m_humanType = HumanType.Civilian;
+
+        /// <summary>感染抵抗剩余时间（秒），> 0 时免疫感染</summary>
+        private float m_infectionResistRemaining;
+
+        /// <summary>是否已触发过感染抵抗（每次进入感染范围只触发一次）</summary>
+        private bool m_resistTriggered;
+
         /// <summary>当前行为状态。</summary>
         public HumanState CurrentState => m_currentState;
 
-        /// <summary>是否已被标记为感染。便于外部在不关心具体枚举的场景下快速判断。</summary>
+        /// <summary>是否已被标记为感染。</summary>
         public bool IsInfected => m_currentState == HumanState.Infected;
 
-        /// <summary>是否处于生成保护期，保护期内不参与感染判定</summary>
+        /// <summary>是否处于生成保护期</summary>
         public bool IsInSpawnGrace => m_spawnGraceRemaining > 0f;
+
+        /// <summary>人类类型。</summary>
+        public HumanType UnitType => m_humanType;
+
+        /// <summary>是否正在抵抗感染（抵抗时间 > 0）</summary>
+        public bool IsResistingInfection => m_infectionResistRemaining > 0f;
 
         /// <summary>
         /// 人类当前的 2D 世界坐标。
-        /// 取 <see cref="Transform.position"/> 的 (x, y) 分量，适配 2D 俯视角（XY 平面）场景。
         /// </summary>
         public Vector2 Position
         {
@@ -64,11 +69,6 @@ namespace Game.Gameplay.Enemy
 
         // ==================== 生命周期 ====================
 
-        /// <summary>
-        /// 被对象池激活时触发。
-        /// 统一调用 <see cref="ResetState"/> 保证每次从池中取出的 Human 都处于干净的 Wandering 状态，
-        /// 避免上一轮使用残留的 Infected/Fleeing 状态污染新一轮行为。
-        /// </summary>
         private void OnEnable()
         {
             ResetState();
@@ -76,19 +76,26 @@ namespace Game.Gameplay.Enemy
 
         // ==================== 状态切换 ====================
 
-        /// <summary>
-        /// 将状态重置为 Wandering。
-        /// 在激活时自动调用；外部系统一般无需主动调用，除非需要在不禁用 GameObject 的前提下清除感染/逃跑状态。
-        /// </summary>
         public void ResetState()
         {
             m_currentState = HumanState.Wandering;
             m_spawnGraceRemaining = 0f;
+            m_infectionResistRemaining = 0f;
+            m_resistTriggered = false;
+            // 注意：类型不在 ResetState 中重置，由 SetHumanType 在生成时设置
         }
 
         /// <summary>
-        /// 设置生成保护时间。在保护期内不参与感染判定。
-        /// 由 HumanClusterSpawner 在生成后调用。
+        /// 设置人类类型。由生成系统在从对象池取出后调用。
+        /// </summary>
+        public void SetHumanType(HumanType type)
+        {
+            m_humanType = type;
+            m_resistTriggered = false;
+        }
+
+        /// <summary>
+        /// 设置生成保护时间。
         /// </summary>
         public void SetSpawnGrace(float duration)
         {
@@ -96,50 +103,50 @@ namespace Game.Gameplay.Enemy
         }
 
         /// <summary>
-        /// 每帧递减保护时间。由 SpawnSystem.UpdateHumanAIs 或外部统一调度。
-        /// 也可以在 Update 中自行递减（因为 HumanUnit 不订阅 Update，这里用 LateUpdate 兜底）。
+        /// 尝试触发感染抵抗。如果该类型有抵抗时间且尚未触发过，则开始抵抗倒计时。
         /// </summary>
+        /// <param name="resistDuration">抵抗持续时间（秒）</param>
+        /// <returns>true 表示正在抵抗（本次感染应被阻止），false 表示无抵抗或已过期</returns>
+        public bool TryTriggerResist(float resistDuration)
+        {
+            if (resistDuration <= 0f)
+                return false;
+
+            if (!m_resistTriggered)
+            {
+                m_resistTriggered = true;
+                m_infectionResistRemaining = resistDuration;
+                return true;
+            }
+
+            // 已触发过，检查是否仍在抵抗中
+            return m_infectionResistRemaining > 0f;
+        }
+
         private void LateUpdate()
         {
             if (m_spawnGraceRemaining > 0f)
             {
                 m_spawnGraceRemaining -= Time.deltaTime;
             }
+            if (m_infectionResistRemaining > 0f)
+            {
+                m_infectionResistRemaining -= Time.deltaTime;
+            }
         }
 
-        /// <summary>
-        /// 切换到逃跑状态。
-        /// 由 <see cref="HumanAI"/> 在感知范围内出现威胁时调用。
-        /// 已被感染的单位（<see cref="IsInfected"/> 为 true）不再接受状态切换，保持 Infected 直到被回收。
-        /// </summary>
         public void EnterFleeing()
         {
-            if (IsInfected)
-            {
-                return;
-            }
+            if (IsInfected) return;
             m_currentState = HumanState.Fleeing;
         }
 
-        /// <summary>
-        /// 切换到漫游状态。
-        /// 由 <see cref="HumanAI"/> 在感知范围内不再存在威胁时调用。
-        /// 已被感染的单位不再接受状态切换。
-        /// </summary>
         public void EnterWandering()
         {
-            if (IsInfected)
-            {
-                return;
-            }
+            if (IsInfected) return;
             m_currentState = HumanState.Wandering;
         }
 
-        /// <summary>
-        /// 将本单位标记为已感染。
-        /// 由 InfectionSystem（task 6.2）在距离判定通过后调用，作为回收前的一帧标记。
-        /// 幂等：对已感染的单位再次调用不产生副作用。
-        /// </summary>
         public void MarkInfected()
         {
             m_currentState = HumanState.Infected;

@@ -1,7 +1,60 @@
+using System;
+using Game.Gameplay.Enemy;
+using Game.Gameplay.Zombie;
 using UnityEngine;
 
 namespace Game.Config
 {
+    /// <summary>
+    /// 人类类型配置数据，定义单种人类的行为参数和刷新权重。
+    /// </summary>
+    [Serializable]
+    public class HumanTypeConfig
+    {
+        [Tooltip("人类类型")]
+        public HumanType Type;
+
+        [Tooltip("移动速度（单位/秒）")]
+        public float MoveSpeed = 3f;
+
+        [Tooltip("感知半径")]
+        public float PerceptionRadius = 4f;
+
+        [Tooltip("刷新权重（越高越常见）")]
+        public float SpawnWeight = 1f;
+
+        [Tooltip("感染抵抗时间（秒），0 表示无抵抗")]
+        public float InfectionResistDuration = 0f;
+
+        [Tooltip("显示颜色")]
+        public Color DisplayColor = Color.white;
+    }
+
+    /// <summary>
+    /// 僵尸类型配置数据，定义单种僵尸的行为参数。
+    /// </summary>
+    [Serializable]
+    public class ZombieTypeConfig
+    {
+        [Tooltip("僵尸类型")]
+        public ZombieType Type;
+
+        [Tooltip("移动速度（单位/秒）")]
+        public float MoveSpeed = 3.2f;
+
+        [Tooltip("感知范围")]
+        public float PerceptionRadius = 3.75f;
+
+        [Tooltip("感染半径加成倍率（1.0 = 无加成）")]
+        public float InfectionRadiusMultiplier = 1f;
+
+        [Tooltip("显示颜色")]
+        public Color DisplayColor = Color.green;
+
+        [Tooltip("缩放倍率（用于视觉区分大小）")]
+        public float ScaleMultiplier = 1f;
+    }
+
     /// <summary>
     /// 游戏全局配置。
     /// 所有运行时可调的数值参数集中在此处，逻辑代码不应硬编码任何数值。
@@ -282,5 +335,151 @@ namespace Game.Config
 
         /// <summary>末日狂潮期间的人类数量上限。</summary>
         public int FinalFrenzyHumanMaxCount => m_finalFrenzyHumanMaxCount;
+
+        // ==================== 单位类型配置 (Unit Type Differentiation) ====================
+
+        [Header("人类类型配置")]
+        [SerializeField] private HumanTypeConfig[] m_humanTypeConfigs = new HumanTypeConfig[]
+        {
+            new HumanTypeConfig
+            {
+                Type = HumanType.Civilian,
+                MoveSpeed = 3f,
+                PerceptionRadius = 4f,
+                SpawnWeight = 70f,
+                InfectionResistDuration = 0f,
+                DisplayColor = new Color(0.9f, 0.9f, 0.9f, 1f) // 白色
+            },
+            new HumanTypeConfig
+            {
+                Type = HumanType.Runner,
+                MoveSpeed = 4.5f,
+                PerceptionRadius = 5.5f,
+                SpawnWeight = 20f,
+                InfectionResistDuration = 0f,
+                DisplayColor = new Color(0.2f, 0.7f, 1f, 1f) // 蓝色
+            },
+            new HumanTypeConfig
+            {
+                Type = HumanType.Guard,
+                MoveSpeed = 2.2f,
+                PerceptionRadius = 3f,
+                SpawnWeight = 10f,
+                InfectionResistDuration = 1.2f,
+                DisplayColor = new Color(1f, 0.4f, 0.2f, 1f) // 橙红色
+            }
+        };
+
+        [Header("僵尸类型配置")]
+        [SerializeField] private ZombieTypeConfig[] m_zombieTypeConfigs = new ZombieTypeConfig[]
+        {
+            new ZombieTypeConfig
+            {
+                Type = ZombieType.Normal,
+                MoveSpeed = 3.2f,
+                PerceptionRadius = 3.75f,
+                InfectionRadiusMultiplier = 1f,
+                DisplayColor = new Color(0.3f, 0.8f, 0.3f, 1f), // 绿色
+                ScaleMultiplier = 1f
+            },
+            new ZombieTypeConfig
+            {
+                Type = ZombieType.Runner,
+                MoveSpeed = 4.2f,
+                PerceptionRadius = 5f,
+                InfectionRadiusMultiplier = 0.9f,
+                DisplayColor = new Color(0.4f, 1f, 0.9f, 1f), // 青色
+                ScaleMultiplier = 0.85f
+            },
+            new ZombieTypeConfig
+            {
+                Type = ZombieType.Brute,
+                MoveSpeed = 2.5f,
+                PerceptionRadius = 3f,
+                InfectionRadiusMultiplier = 1.5f,
+                DisplayColor = new Color(0.8f, 0.2f, 0.8f, 1f), // 紫色
+                ScaleMultiplier = 1.3f
+            }
+        };
+
+        /// <summary>人类类型配置数组。</summary>
+        public HumanTypeConfig[] HumanTypeConfigs => m_humanTypeConfigs;
+
+        /// <summary>僵尸类型配置数组。</summary>
+        public ZombieTypeConfig[] ZombieTypeConfigs => m_zombieTypeConfigs;
+
+        /// <summary>
+        /// 根据人类类型获取对应配置。找不到时返回 Civilian 配置作为兜底。
+        /// </summary>
+        public HumanTypeConfig GetHumanTypeConfig(HumanType type)
+        {
+            if (m_humanTypeConfigs != null)
+            {
+                for (int i = 0; i < m_humanTypeConfigs.Length; i++)
+                {
+                    if (m_humanTypeConfigs[i].Type == type)
+                        return m_humanTypeConfigs[i];
+                }
+            }
+            // 兜底：返回第一个或创建默认
+            return m_humanTypeConfigs != null && m_humanTypeConfigs.Length > 0
+                ? m_humanTypeConfigs[0]
+                : new HumanTypeConfig { Type = HumanType.Civilian };
+        }
+
+        /// <summary>
+        /// 根据僵尸类型获取对应配置。找不到时返回 Normal 配置作为兜底。
+        /// </summary>
+        public ZombieTypeConfig GetZombieTypeConfig(ZombieType type)
+        {
+            if (m_zombieTypeConfigs != null)
+            {
+                for (int i = 0; i < m_zombieTypeConfigs.Length; i++)
+                {
+                    if (m_zombieTypeConfigs[i].Type == type)
+                        return m_zombieTypeConfigs[i];
+                }
+            }
+            return m_zombieTypeConfigs != null && m_zombieTypeConfigs.Length > 0
+                ? m_zombieTypeConfigs[0]
+                : new ZombieTypeConfig { Type = ZombieType.Normal };
+        }
+
+        /// <summary>
+        /// 根据人类类型获取转化后的僵尸类型。
+        /// </summary>
+        public static ZombieType GetConvertedZombieType(HumanType humanType)
+        {
+            switch (humanType)
+            {
+                case HumanType.Runner: return ZombieType.Runner;
+                case HumanType.Guard: return ZombieType.Brute;
+                default: return ZombieType.Normal;
+            }
+        }
+
+        /// <summary>
+        /// 按权重随机选择一个人类类型。
+        /// </summary>
+        public HumanType PickRandomHumanType()
+        {
+            if (m_humanTypeConfigs == null || m_humanTypeConfigs.Length == 0)
+                return HumanType.Civilian;
+
+            float totalWeight = 0f;
+            for (int i = 0; i < m_humanTypeConfigs.Length; i++)
+                totalWeight += m_humanTypeConfigs[i].SpawnWeight;
+
+            float roll = UnityEngine.Random.Range(0f, totalWeight);
+            float cumulative = 0f;
+            for (int i = 0; i < m_humanTypeConfigs.Length; i++)
+            {
+                cumulative += m_humanTypeConfigs[i].SpawnWeight;
+                if (roll < cumulative)
+                    return m_humanTypeConfigs[i].Type;
+            }
+
+            return m_humanTypeConfigs[m_humanTypeConfigs.Length - 1].Type;
+        }
     }
 }

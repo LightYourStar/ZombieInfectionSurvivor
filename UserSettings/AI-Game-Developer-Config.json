@@ -452,5 +452,5 @@
   "timeoutMs": 10000,
   "keepConnected": true,
   "generateSkillFiles": false,
-  "skillsPath": "D:\\BLearnProject\\ZombieInfectionSurvivor\\.agents\\skills"
+  "skillsPath": "D:\\BLearnProject\\ZombieInfectionSurvivor\\.claude\\skills"
 }

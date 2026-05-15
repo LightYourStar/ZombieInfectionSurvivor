@@ -89,6 +89,7 @@ namespace Game.Core
         [SerializeField] private GameSessionController m_sessionController;
         [SerializeField] private HumanClusterSpawner m_clusterSpawner;
         [SerializeField] private ResultPanel m_resultPanel;
+        private MetaUpgradePanel m_metaUpgradePanel;
 
         // ==================== 内部运行时状态 ====================
 
@@ -109,6 +110,9 @@ namespace Game.Core
 
         /// <summary>末日狂潮是否已在本局触发过（每局只触发一次）</summary>
         private bool m_finalFrenzyTriggered;
+
+        private int m_lastGoldEarned;
+        private int m_lastTotalGold;
 
         // ==================== Unity 生命周期 ====================
 
@@ -258,6 +262,9 @@ namespace Game.Core
             {
                 m_uiManager.Initialize();
             }
+
+            EnsureMetaUpgradePanel();
+            InitializeStartPanelEntry();
 
             // 11. 订阅游戏事件
             SubscribeEvents();
@@ -422,12 +429,13 @@ namespace Game.Core
             // 重置本局统计
             m_infectionCount = 0;
             m_finalFrenzyTriggered = false;
-
-            // 重置玩家属性（清除局内升级加成，保留基础值+局外加成）
-            if (m_playerStats != null)
+            m_lastGoldEarned = 0;
+            if (m_metaUpgradePanel != null)
             {
-                m_playerStats.Reset();
+                m_metaUpgradePanel.HidePanel();
             }
+
+            RefreshPlayerStatsFromMeta();
 
             // 重置各子系统
             if (m_spawnSystem != null)
@@ -500,26 +508,30 @@ namespace Game.Core
         /// </summary>
         private void HandleSettlement()
         {
-            // 结束单局控制器
-            if (m_sessionController != null)
-            {
-                m_sessionController.EndSession();
-            }
-
             // 停止倒计时（防止残余帧继续递减）
             if (m_timerSystem != null)
             {
                 m_timerSystem.StopTimer();
             }
 
-            // 将本局获得的金币累加到局外持久化数据
-            if (m_metaUpgradeSystem != null && m_experienceSystem != null)
+            // 将本局获得的金币累加到局外持久化数据（使用感染数+评级公式）
+            if (m_metaUpgradeSystem != null && m_sessionController != null)
             {
-                int goldEarned = m_experienceSystem.CurrentGold;
+                int infectedCount = m_sessionController.InfectedCount;
+                SessionRating rating = m_sessionController.CalculateRating(infectedCount);
+                int goldEarned = MetaUpgradeSystem.CalculateGoldReward(infectedCount, rating);
+                m_lastGoldEarned = goldEarned;
                 if (goldEarned > 0)
                 {
                     m_metaUpgradeSystem.AddGold(goldEarned);
                 }
+                m_lastTotalGold = m_metaUpgradeSystem.Load().TotalGold;
+            }
+
+            // 结束单局控制器。OnSessionEnd 会同步触发并显示 ResultPanel。
+            if (m_sessionController != null)
+            {
+                m_sessionController.EndSession();
             }
 
             // 新的 ResultPanel 已接管结算展示时，这里只做停表与持久化，
@@ -663,7 +675,21 @@ namespace Game.Core
             // 显示 ResultPanel，绑定 Restart 回调
             if (m_resultPanel != null)
             {
-                m_resultPanel.ShowResult(result, HandleRestart);
+                SessionResult displayResult = new SessionResult(
+                    result.InfectedCount,
+                    result.MaxZombieCount,
+                    result.MaxCombo,
+                    result.FrenzyInfectedCount,
+                    result.Rating,
+                    result.IsVictory,
+                    result.ElapsedTime,
+                    result.UpgradeSummary,
+                    result.PlayerDirectInfectedCount,
+                    result.ZombieInfectedCount,
+                    result.BurstInfectedCount,
+                    m_lastGoldEarned,
+                    m_lastTotalGold);
+                m_resultPanel.ShowResult(displayResult, HandleRestart, OpenMetaUpgradePanel);
             }
         }
 
@@ -695,6 +721,79 @@ namespace Game.Core
         public void ResetSystems()
         {
             StartNewMatch();
+        }
+
+        private void OpenMetaUpgradePanel()
+        {
+            EnsureMetaUpgradePanel();
+            if (m_metaUpgradePanel != null)
+            {
+                m_metaUpgradePanel.ShowPanel();
+            }
+        }
+
+        private void HandleMetaUpgradePurchased()
+        {
+            RefreshPlayerStatsFromMeta();
+        }
+
+        private void RefreshPlayerStatsFromMeta()
+        {
+            if (m_playerStats != null)
+            {
+                m_playerStats.Initialize(m_gameConfig, m_metaUpgradeSystem);
+            }
+        }
+
+        private void EnsureMetaUpgradePanel()
+        {
+            if (m_metaUpgradePanel != null)
+            {
+                return;
+            }
+
+            Canvas canvas = FindObjectOfType<Canvas>();
+            if (canvas == null)
+            {
+                GameObject canvasObject = new GameObject("MetaUpgradeCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+                canvas = canvasObject.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+                CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1080f, 1920f);
+                scaler.matchWidthOrHeight = 0.5f;
+            }
+
+            MetaUpgradePanel existing = canvas.GetComponentInChildren<MetaUpgradePanel>(true);
+            if (existing != null)
+            {
+                m_metaUpgradePanel = existing;
+            }
+            else
+            {
+                GameObject panelObject = new GameObject("MetaUpgradePanel", typeof(RectTransform));
+                panelObject.transform.SetParent(canvas.transform, false);
+
+                RectTransform rect = panelObject.GetComponent<RectTransform>();
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+
+                m_metaUpgradePanel = panelObject.AddComponent<MetaUpgradePanel>();
+            }
+
+            m_metaUpgradePanel.Initialize(m_metaUpgradeSystem, HandleMetaUpgradePurchased);
+        }
+
+        private void InitializeStartPanelEntry()
+        {
+            StartPanel startPanel = FindObjectOfType<StartPanel>(true);
+            if (startPanel != null)
+            {
+                startPanel.Initialize(OpenMetaUpgradePanel);
+            }
         }
 
         // ==================== 末日狂潮检测 ====================

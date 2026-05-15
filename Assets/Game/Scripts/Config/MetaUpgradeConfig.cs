@@ -25,14 +25,20 @@ namespace Game.Config
             /// <summary>
             /// 该轨道允许的最大等级（由 BonusPerLevel 长度决定，等于 Length - 1）
             /// </summary>
-            public int MaxLevel => Mathf.Max(0, m_bonusPerLevel.Length - 1);
+            public int MaxLevel => Mathf.Max(0, BonusCount - 1);
+
+            public int CostCount => m_costs != null ? m_costs.Length : 0;
+
+            public int BonusCount => m_bonusPerLevel != null ? m_bonusPerLevel.Length : 0;
+
+            public bool HasBonusData => BonusCount > 1;
 
             /// <summary>
             /// 获取从指定等级升级到下一级所需金币，超出范围返回 -1 表示无法继续升级
             /// </summary>
             public int GetCost(int currentLevel)
             {
-                if (currentLevel < 0 || currentLevel >= m_costs.Length)
+                if (m_costs == null || currentLevel < 0 || currentLevel >= m_costs.Length)
                 {
                     return -1;
                 }
@@ -44,7 +50,7 @@ namespace Game.Config
             /// </summary>
             public float GetBonus(int level)
             {
-                if (m_bonusPerLevel.Length == 0)
+                if (m_bonusPerLevel == null || m_bonusPerLevel.Length == 0)
                 {
                     return 0f;
                 }

@@ -13,14 +13,32 @@ MonoBehaviour:
   m_Name: MetaUpgradeConfig
   m_EditorClassIdentifier: 
   m_moveSpeedTrack:
-    m_costs: 
-    m_bonusPerLevel: []
+    m_costs: 3200000064000000c80000005e010000f4010000
+    m_bonusPerLevel:
+    - 0
+    - 0.1
+    - 0.2
+    - 0.3
+    - 0.4
+    - 0.5
   m_infectionRadiusTrack:
-    m_costs: 
-    m_bonusPerLevel: []
+    m_costs: 3200000064000000c80000005e010000f4010000
+    m_bonusPerLevel:
+    - 0
+    - 0.05
+    - 0.1
+    - 0.15
+    - 0.2
+    - 0.25
   m_zombieCapTrack:
-    m_costs: 
-    m_bonusPerLevel: []
+    m_costs: 3200000064000000c80000005e010000f4010000
+    m_bonusPerLevel:
+    - 0
+    - 2
+    - 4
+    - 6
+    - 8
+    - 10
   m_expMultiplierTrack:
     m_costs: 
     m_bonusPerLevel: []

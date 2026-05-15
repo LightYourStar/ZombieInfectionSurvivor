@@ -38,12 +38,20 @@ namespace Game.Core
         /// <summary>本局升级摘要文本</summary>
         public string UpgradeSummary { get; }
 
+        /// <summary>本局结算获得金币</summary>
+        public int GoldEarned { get; }
+
+        /// <summary>结算后的当前总金币</summary>
+        public int TotalGold { get; }
+
         public SessionResult(int infectedCount, int maxZombieCount, int maxCombo,
             int frenzyInfectedCount, SessionRating rating, bool isVictory,
             float elapsedTime, string upgradeSummary,
             int playerDirectInfectedCount = 0,
             int zombieInfectedCount = 0,
-            int burstInfectedCount = 0)
+            int burstInfectedCount = 0,
+            int goldEarned = 0,
+            int totalGold = 0)
         {
             InfectedCount = infectedCount;
             MaxZombieCount = maxZombieCount;
@@ -56,6 +64,8 @@ namespace Game.Core
             IsVictory = isVictory;
             ElapsedTime = elapsedTime;
             UpgradeSummary = upgradeSummary ?? "无";
+            GoldEarned = goldEarned;
+            TotalGold = totalGold;
         }
     }
 }

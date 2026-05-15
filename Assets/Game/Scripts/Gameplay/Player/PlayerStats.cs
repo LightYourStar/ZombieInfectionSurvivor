@@ -86,15 +86,41 @@ namespace Game.Gameplay.Player
             m_baseZombieCompanionCap = config.ZombieCompanionMaxCount;
             m_baseExpMultiplier = 1f;
 
-            // 叠加局外永久升级加成。
-            // TODO(任务 9.7): 由 MetaUpgradeSystem 结合 MetaUpgradeConfig.UpgradeTrack 将等级转换为实际加成数值，
-            // 当前仅占位，保证接口就绪；metaData 的等级字段在此阶段不参与基础值合成。
+            // 叠加局外永久升级加成
             if (metaData != null)
             {
-                m_baseMoveSpeed += 0f;
-                m_baseInfectionRadius += 0f;
-                m_baseZombieCompanionCap += 0;
-                m_baseExpMultiplier += 0f;
+                m_baseMoveSpeed += metaData.SpeedLevel * 0.1f;
+                m_baseInfectionRadius += metaData.InfectionRadiusLevel * 0.05f;
+                m_baseZombieCompanionCap += metaData.ZombieCapLevel * 2;
+                m_baseExpMultiplier += 0f; // 经验倍率暂不做局外升级
+            }
+
+            ClearBonuses();
+        }
+
+        /// <summary>
+        /// 使用局外升级系统重新计算基础属性，优先读取 MetaUpgradeConfig 中的加成配置。
+        /// </summary>
+        public void Initialize(GameConfig config, MetaUpgradeSystem metaUpgradeSystem)
+        {
+            if (config == null)
+            {
+                Debug.LogError("[PlayerStats] Initialize 收到空的 GameConfig，玩家属性将保持默认值 0");
+                ResetBaseValuesToZero();
+                ClearBonuses();
+                return;
+            }
+
+            m_baseMoveSpeed = config.PlayerBaseSpeed;
+            m_baseInfectionRadius = config.PlayerBaseInfectionRadius;
+            m_baseZombieCompanionCap = config.ZombieCompanionMaxCount;
+            m_baseExpMultiplier = 1f;
+
+            if (metaUpgradeSystem != null)
+            {
+                m_baseMoveSpeed += metaUpgradeSystem.GetBonus(UpgradeType.MoveSpeed);
+                m_baseInfectionRadius += metaUpgradeSystem.GetBonus(UpgradeType.InfectionRadius);
+                m_baseZombieCompanionCap += Mathf.RoundToInt(metaUpgradeSystem.GetBonus(UpgradeType.ZombieCompanionCap));
             }
 
             ClearBonuses();

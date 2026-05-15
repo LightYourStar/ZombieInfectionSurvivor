@@ -27,11 +27,14 @@ namespace Game.UI
         private Text m_zombieInfectedText;
         private Text m_burstInfectedText;
         private Text m_upgradeSummaryText;
+        private Text m_goldEarnedText;
+        private Text m_totalGoldText;
+        private Button m_metaUpgradeButton;
 
         private GameObject m_runtimeRoot;
         private static Font s_defaultFont;
         private const float MobileCardWidth = 440f;
-        private const float MobileCardHeight = 680f;
+        private const float MobileCardHeight = 780f;
 
         // ==================== 生命周期 ====================
 
@@ -49,6 +52,11 @@ namespace Game.UI
         /// <param name="result">本局结算数据</param>
         /// <param name="onRestart">点击 Restart 按钮时的回调</param>
         public void ShowResult(SessionResult result, Action onRestart)
+        {
+            ShowResult(result, onRestart, null);
+        }
+
+        public void ShowResult(SessionResult result, Action onRestart, Action onMetaUpgrade)
         {
             EnsureUIBuilt();
 
@@ -72,6 +80,12 @@ namespace Game.UI
 
             if (m_burstInfectedText != null)
                 m_burstInfectedText.text = result.BurstInfectedCount.ToString();
+
+            if (m_goldEarnedText != null)
+                m_goldEarnedText.text = result.GoldEarned.ToString();
+
+            if (m_totalGoldText != null)
+                m_totalGoldText.text = result.TotalGold.ToString();
 
             if (m_ratingText != null)
             {
@@ -102,6 +116,15 @@ namespace Game.UI
                 }
             }
 
+            if (m_metaUpgradeButton != null)
+            {
+                m_metaUpgradeButton.onClick.RemoveAllListeners();
+                if (onMetaUpgrade != null)
+                {
+                    m_metaUpgradeButton.onClick.AddListener(() => onMetaUpgrade());
+                }
+            }
+
             SetVisible(true);
 
             if (GameAudioFeedback.Instance != null)
@@ -128,9 +151,12 @@ namespace Game.UI
                 m_playerDirectInfectedText != null &&
                 m_zombieInfectedText != null &&
                 m_burstInfectedText != null &&
+                m_goldEarnedText != null &&
+                m_totalGoldText != null &&
                 m_ratingText != null &&
                 m_victoryStatusText != null &&
-                m_restartButton != null;
+                m_restartButton != null &&
+                m_metaUpgradeButton != null;
 
             if (hasAllReferences)
             {
@@ -182,7 +208,7 @@ namespace Game.UI
 
             VerticalLayoutGroup layout = card.GetComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(24, 24, 22, 22);
-            layout.spacing = 8f;
+            layout.spacing = 6f;
             layout.childAlignment = TextAnchor.UpperCenter;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
@@ -217,9 +243,13 @@ namespace Game.UI
             m_zombieInfectedText = CreateStatTile(statGrid, "僵尸感染", "72");
             m_burstInfectedText = CreateStatTile(statGrid, "爆发感染", "23");
             m_frenzyInfectedText = CreateStatTile(statGrid, "狂潮感染", "38");
+            m_goldEarnedText = CreateStatTile(statGrid, "本局金币", "86");
+            m_totalGoldText = CreateStatTile(statGrid, "总金币", "240");
             m_upgradeSummaryText = CreateWideStatRow(card.transform, "本局升级", "无");
 
-            m_restartButton = CreateButton(card.transform, "RestartButton", "再来一局");
+            Transform buttonRow = CreateButtonRow(card.transform);
+            m_metaUpgradeButton = CreateButton(buttonRow, "MetaUpgradeButton", "局外升级", new Color(0.24f, 0.38f, 0.68f, 1f));
+            m_restartButton = CreateButton(buttonRow, "RestartButton", "再来一局", new Color(0.24f, 0.68f, 0.38f, 1f));
         }
 
         private Text CreateRatingText(Transform parent)
@@ -252,7 +282,7 @@ namespace Game.UI
             layout.childAlignment = TextAnchor.MiddleCenter;
 
             LayoutElement gridLayout = grid.GetComponent<LayoutElement>();
-            gridLayout.preferredHeight = 232f;
+            gridLayout.preferredHeight = 306f;
 
             return grid.transform;
         }
@@ -353,7 +383,30 @@ namespace Game.UI
             return valueText;
         }
 
-        private Button CreateButton(Transform parent, string name, string label)
+        private Transform CreateButtonRow(Transform parent)
+        {
+            GameObject row = new GameObject(
+                "ResultButtons",
+                typeof(RectTransform),
+                typeof(HorizontalLayoutGroup),
+                typeof(LayoutElement));
+            row.transform.SetParent(parent, false);
+
+            HorizontalLayoutGroup layout = row.GetComponent<HorizontalLayoutGroup>();
+            layout.spacing = 12f;
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+
+            LayoutElement rowLayout = row.GetComponent<LayoutElement>();
+            rowLayout.preferredHeight = 62f;
+
+            return row.transform;
+        }
+
+        private Button CreateButton(Transform parent, string name, string label, Color color)
         {
             GameObject buttonGO = new GameObject(
                 name,
@@ -365,20 +418,20 @@ namespace Game.UI
             buttonGO.transform.SetParent(parent, false);
 
             Image image = buttonGO.GetComponent<Image>();
-            image.color = new Color(0.24f, 0.68f, 0.38f, 1f);
+            image.color = color;
 
             LayoutElement layout = buttonGO.GetComponent<LayoutElement>();
-            layout.preferredWidth = 280f;
+            layout.preferredWidth = 190f;
             layout.preferredHeight = 62f;
 
             RectTransform rect = buttonGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(280f, 62f);
+            rect.sizeDelta = new Vector2(190f, 62f);
 
             Text labelText = CreateStandaloneText(
                 "Text",
                 buttonGO.transform,
                 label,
-                26,
+                23,
                 Color.white,
                 FontStyle.Bold);
             RectTransform labelRect = labelText.GetComponent<RectTransform>();

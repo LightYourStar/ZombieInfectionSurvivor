@@ -1,5 +1,6 @@
 using System.Collections;
 using Game.Core;
+using Game.Gameplay.Feedback;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -107,42 +108,51 @@ namespace Game.UI
             Color color;
             int fontSize;
 
-            if (combo >= 50)
+            if (combo >= 100)
             {
-                text = $"x{combo} LEGENDARY!";
+                text = $"x{combo} 传奇!";
                 color = new Color(1f, 0.84f, 0f);
-                fontSize = 48;
+                fontSize = 52;
             }
-            else if (combo >= 20)
+            else if (combo >= 50)
             {
-                text = $"x{combo} UNSTOPPABLE!";
+                text = $"x{combo} 无人能挡!";
+                color = new Color(1f, 0.84f, 0f);
+                fontSize = 46;
+            }
+            else if (combo >= 25)
+            {
+                text = $"x{combo} 势不可挡!";
                 color = new Color(1f, 0.2f, 0.1f);
-                fontSize = 42;
+                fontSize = 40;
             }
             else if (combo >= 10)
             {
-                text = $"x{combo} RAMPAGE!";
+                text = $"x{combo} 狂暴!";
                 color = new Color(1f, 0.5f, 0f);
-                fontSize = 36;
+                fontSize = 34;
             }
             else
             {
-                text = $"x{combo} COMBO!";
+                text = $"x{combo} 连击!";
                 color = new Color(0.3f, 1f, 0.4f);
-                fontSize = 30;
+                fontSize = 28;
             }
 
             ShowFloatingText(text, color, fontSize);
+            if (GameAudioFeedback.Instance != null) GameAudioFeedback.Instance.PlayComboMilestone();
         }
 
         private void HandleBurstEvent(int count)
         {
             ShowFloatingText($"BURST x{count}!", new Color(1f, 1f, 0.3f), 34);
+            if (GameAudioFeedback.Instance != null) GameAudioFeedback.Instance.PlayBurst();
         }
 
         private void HandleFinalFrenzyStarted()
         {
-            ShowFloatingText("FINAL FRENZY!", new Color(1f, 0.36f, 0.12f), 44);
+            ShowFloatingText("末日狂潮!", new Color(1f, 0.36f, 0.12f), 44);
+            if (GameAudioFeedback.Instance != null) GameAudioFeedback.Instance.PlayFinalFrenzyStart();
         }
 
         private void HandleLevelUp(int level)

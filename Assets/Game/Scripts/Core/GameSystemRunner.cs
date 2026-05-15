@@ -264,6 +264,8 @@ namespace Game.Core
 
             // 12. 确保感染 VFX 池已创建并激活（自动订阅 OnInfectionSuccess）
             EnsureInfectionVFXPool();
+            EnsureJuiceFeedback();
+            EnsureAudioFeedback();
             InitializeDebugTools();
 
             // 13. 确保状态机处于 Start 状态
@@ -862,14 +864,29 @@ namespace Game.Core
         private void EnsureInfectionVFXPool()
         {
             InfectionVFXPool existing = FindObjectOfType<InfectionVFXPool>();
-            if (existing != null)
-            {
-                return;
-            }
+            if (existing != null) return;
 
             GameObject vfxGo = new GameObject("InfectionVFXPool");
             vfxGo.transform.SetParent(transform, false);
             vfxGo.AddComponent<InfectionVFXPool>();
+        }
+
+        private void EnsureJuiceFeedback()
+        {
+            if (FindObjectOfType<InfectionJuiceFeedback>() != null) return;
+
+            GameObject go = new GameObject("InfectionJuiceFeedback");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<InfectionJuiceFeedback>();
+        }
+
+        private void EnsureAudioFeedback()
+        {
+            if (FindObjectOfType<GameAudioFeedback>() != null) return;
+
+            GameObject go = new GameObject("GameAudioFeedback");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<GameAudioFeedback>();
         }
 
         /// <summary>

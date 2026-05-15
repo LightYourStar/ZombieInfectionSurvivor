@@ -46,6 +46,11 @@ namespace Game.UI
         [Tooltip("下一目标提示文本（可选，未赋值时自动创建）")]
         [SerializeField] private Text m_nextGoalText;
 
+        [Header("移动端布局")]
+        [SerializeField] private bool m_applyMobileLayout = true;
+        [SerializeField] private bool m_showResourceTextsOnMobile = false;
+        [SerializeField] private float m_safeAreaPadding = 24f;
+
         // ==================== 运行时依赖 ====================
 
         /// <summary>TimerSystem 引用，用于订阅时间变化事件</summary>
@@ -94,10 +99,13 @@ namespace Game.UI
             // 初始隐藏目标达成提示和末日狂潮提示
             HideVictoryIndicator();
             HideFrenzyIndicator();
+            ApplyMobileLayout();
         }
 
         private void OnEnable()
         {
+            ApplyMobileLayout();
+
             GameEvents.OnExpChanged += UpdateExp;
             GameEvents.OnGoldChanged += UpdateGold;
             GameEvents.OnLevelUp += UpdateLevel;
@@ -173,6 +181,7 @@ namespace Game.UI
         {
             if (m_expText != null)
             {
+                m_expText.gameObject.SetActive(!m_applyMobileLayout || m_showResourceTextsOnMobile);
                 m_expText.text = $"EXP: {currentExp}";
             }
         }
@@ -189,6 +198,7 @@ namespace Game.UI
         {
             if (m_goldText != null)
             {
+                m_goldText.gameObject.SetActive(!m_applyMobileLayout || m_showResourceTextsOnMobile);
                 m_goldText.text = $"金币: {currentGold}";
             }
         }
@@ -362,7 +372,7 @@ namespace Game.UI
             float shrinkDuration = 0.4f;
             elapsed = 0f;
             Vector2 startPos = rect.anchoredPosition;
-            Vector2 endPos = new Vector2(160f, 0f);
+            Vector2 endPos = new Vector2(116f, -108f);
             while (elapsed < shrinkDuration)
             {
                 elapsed += Time.deltaTime;
@@ -409,21 +419,22 @@ namespace Game.UI
             go.transform.SetParent(transform, false);
 
             RectTransform rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.92f);
-            rect.anchorMax = new Vector2(0.5f, 0.92f);
+            rect.anchorMin = new Vector2(0.5f, 0.89f);
+            rect.anchorMax = new Vector2(0.5f, 0.89f);
             rect.pivot = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = new Vector2(400f, 36f);
+            rect.sizeDelta = new Vector2(360f, 32f);
 
             Text text = go.GetComponent<Text>();
             text.text = "";
-            text.fontSize = 18;
+            text.fontSize = 16;
             text.fontStyle = FontStyle.Normal;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = new Color(0.9f, 0.9f, 0.6f, 1f);
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
             m_nextGoalText = text;
+            ApplyMobileLayoutToText(m_nextGoalText, new Vector2(0.5f, 1f), new Vector2(0f, -72f), new Vector2(360f, 32f), 16, TextAnchor.MiddleCenter);
         }
 
         /// <summary>
@@ -441,15 +452,15 @@ namespace Game.UI
             go.transform.SetParent(transform, false);
 
             RectTransform rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.85f);
-            rect.anchorMax = new Vector2(0.5f, 0.85f);
+            rect.anchorMin = new Vector2(0.5f, 1f);
+            rect.anchorMax = new Vector2(0.5f, 1f);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.anchoredPosition = Vector2.zero;
-            rect.sizeDelta = new Vector2(400f, 60f);
+            rect.anchoredPosition = new Vector2(0f, -108f);
+            rect.sizeDelta = new Vector2(360f, 54f);
 
             Text text = go.GetComponent<Text>();
             text.text = "末日狂潮";
-            text.fontSize = 32;
+            text.fontSize = 28;
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = new Color(1f, 0.3f, 0.1f, 1f);
@@ -460,7 +471,7 @@ namespace Game.UI
             cg.alpha = 0f;
 
             m_frenzyIndicator = go;
-            m_frenzyIndicatorInitialPos = Vector2.zero; // 记录初始位置
+            m_frenzyIndicatorInitialPos = new Vector2(0f, -108f); // 记录初始位置
             go.SetActive(false);
         }
 
@@ -608,11 +619,11 @@ namespace Game.UI
             root.transform.SetParent(transform, false);
 
             RectTransform rootRect = root.GetComponent<RectTransform>();
-            rootRect.anchorMin = new Vector2(0.5f, 0.74f);
-            rootRect.anchorMax = new Vector2(0.5f, 0.74f);
+            rootRect.anchorMin = new Vector2(0.5f, 1f);
+            rootRect.anchorMax = new Vector2(0.5f, 1f);
             rootRect.pivot = new Vector2(0.5f, 0.5f);
-            rootRect.anchoredPosition = Vector2.zero;
-            rootRect.sizeDelta = new Vector2(520f, 46f);
+            rootRect.anchoredPosition = new Vector2(0f, -150f);
+            rootRect.sizeDelta = new Vector2(360f, 42f);
 
             Image bg = root.GetComponent<Image>();
             bg.color = new Color(0.04f, 0.035f, 0.03f, 0.72f);
@@ -631,7 +642,7 @@ namespace Game.UI
 
             Text text = textGo.GetComponent<Text>();
             text.text = string.Empty;
-            text.fontSize = 24;
+            text.fontSize = 20;
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
@@ -642,6 +653,89 @@ namespace Game.UI
             m_stageToastText = text;
             m_stageToastCanvasGroup = cg;
             root.SetActive(false);
+        }
+
+        private void ApplyMobileLayout()
+        {
+            if (!m_applyMobileLayout)
+            {
+                return;
+            }
+
+            RectTransform root = transform as RectTransform;
+            MobileSafeAreaUtility.ApplySafeArea(root, m_safeAreaPadding);
+
+            ApplyMobileLayoutToText(m_timeText, new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(180f, 42f), 30, TextAnchor.MiddleCenter);
+            ApplyMobileLayoutToText(m_infectionCountText, new Vector2(0f, 1f), new Vector2(82f, -34f), new Vector2(150f, 34f), 22, TextAnchor.MiddleLeft);
+            ApplyMobileLayoutToText(m_ratingPreviewText, new Vector2(1f, 1f), new Vector2(-58f, -34f), new Vector2(92f, 34f), 24, TextAnchor.MiddleRight);
+            ApplyMobileLayoutToText(m_levelText, new Vector2(0f, 1f), new Vector2(82f, -68f), new Vector2(150f, 28f), 17, TextAnchor.MiddleLeft);
+            ApplyMobileLayoutToText(m_nextGoalText, new Vector2(0.5f, 1f), new Vector2(0f, -72f), new Vector2(360f, 32f), 16, TextAnchor.MiddleCenter);
+            ApplyMobileLayoutToObject(m_frenzyIndicator, new Vector2(0.5f, 1f), new Vector2(0f, -108f), new Vector2(360f, 54f), 28);
+            ApplyMobileLayoutToObject(m_victoryIndicator, new Vector2(0.5f, 1f), new Vector2(0f, -112f), new Vector2(320f, 44f), 22);
+
+            if (m_expText != null)
+            {
+                m_expText.gameObject.SetActive(m_showResourceTextsOnMobile);
+                ApplyMobileLayoutToText(m_expText, new Vector2(0f, 1f), new Vector2(82f, -96f), new Vector2(150f, 24f), 14, TextAnchor.MiddleLeft);
+            }
+
+            if (m_goldText != null)
+            {
+                m_goldText.gameObject.SetActive(m_showResourceTextsOnMobile);
+                ApplyMobileLayoutToText(m_goldText, new Vector2(0f, 1f), new Vector2(82f, -120f), new Vector2(150f, 24f), 14, TextAnchor.MiddleLeft);
+            }
+        }
+
+        private void ApplyMobileLayoutToText(Text text, Vector2 anchor, Vector2 anchoredPosition, Vector2 size, int fontSize, TextAnchor alignment)
+        {
+            if (text == null)
+            {
+                return;
+            }
+
+            RectTransform rect = text.rectTransform;
+            if (rect == null)
+            {
+                return;
+            }
+
+            rect.anchorMin = anchor;
+            rect.anchorMax = anchor;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = anchoredPosition;
+            rect.sizeDelta = size;
+
+            text.fontSize = fontSize;
+            text.alignment = alignment;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+        }
+
+        private void ApplyMobileLayoutToObject(GameObject target, Vector2 anchor, Vector2 anchoredPosition, Vector2 size, int fontSize)
+        {
+            if (target == null)
+            {
+                return;
+            }
+
+            RectTransform rect = target.GetComponent<RectTransform>();
+            if (rect != null)
+            {
+                rect.anchorMin = anchor;
+                rect.anchorMax = anchor;
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = anchoredPosition;
+                rect.sizeDelta = size;
+            }
+
+            Text text = target.GetComponentInChildren<Text>(true);
+            if (text != null)
+            {
+                text.fontSize = fontSize;
+                text.alignment = TextAnchor.MiddleCenter;
+                text.horizontalOverflow = HorizontalWrapMode.Wrap;
+                text.verticalOverflow = VerticalWrapMode.Truncate;
+            }
         }
 
         private float GetFrenzyStartRemainingTime()

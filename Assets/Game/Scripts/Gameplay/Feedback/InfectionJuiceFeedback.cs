@@ -10,23 +10,34 @@ namespace Game.Gameplay.Feedback
     public class InfectionJuiceFeedback : MonoBehaviour
     {
         [Header("Float Text")]
-        [SerializeField] private int m_floatTextPoolSize = 48;
-        [SerializeField] private float m_floatTextDuration = 0.55f;
-        [SerializeField] private float m_floatTextRiseSpeed = 1.65f;
-        [SerializeField] private float m_floatTextStartScale = 0.72f;
-        [SerializeField] private float m_floatTextPeakScale = 1.2f;
+        [SerializeField] private int m_floatTextPoolSize = 32;
+        [SerializeField] private int m_maxActiveFloatTexts = 18;
+        [SerializeField] private float m_minFloatTextInterval = 0.025f;
+        [SerializeField] private float m_floatTextDuration = 0.48f;
+        [SerializeField] private float m_floatTextRiseSpeed = 1.35f;
+        [SerializeField] private float m_floatTextStartScale = 0.62f;
+        [SerializeField] private float m_floatTextPeakScale = 1.05f;
 
         [Header("Impact Flash")]
-        [SerializeField] private int m_impactPoolSize = 48;
+        [SerializeField] private int m_impactPoolSize = 40;
+        [SerializeField] private int m_maxActiveImpacts = 30;
         [SerializeField] private float m_impactDuration = 0.22f;
         [SerializeField] private float m_impactStartScale = 0.72f;
         [SerializeField] private float m_impactPeakScale = 1.05f;
-        [SerializeField] private Color m_impactColor = new Color(1f, 1f, 1f, 0.75f);
+        [SerializeField] private Color m_impactColor = new Color(1f, 1f, 1f, 0.55f);
 
         private readonly List<FloatTextInstance> m_floatTexts = new List<FloatTextInstance>();
         private readonly List<ImpactInstance> m_impacts = new List<ImpactInstance>();
         private Sprite m_flashSprite;
         private Font m_defaultFont;
+        private float m_lastFloatTextTime = -999f;
+        private int m_peakActiveFloatTexts;
+        private int m_peakActiveImpacts;
+
+        public int FloatTextPoolSize => m_floatTexts.Count;
+        public int ImpactPoolSize => m_impacts.Count;
+        public int PeakActiveFloatTexts => m_peakActiveFloatTexts;
+        public int PeakActiveImpacts => m_peakActiveImpacts;
 
         private struct FloatTextInstance
         {
@@ -157,6 +168,18 @@ namespace Game.Gameplay.Feedback
 
         private void SpawnFloatText(Vector2 position)
         {
+            if (Time.time - m_lastFloatTextTime < m_minFloatTextInterval)
+            {
+                return;
+            }
+
+            int activeCount = CountActiveFloatTexts();
+            if (activeCount >= Mathf.Min(m_maxActiveFloatTexts, m_floatTexts.Count))
+            {
+                return;
+            }
+
+            m_lastFloatTextTime = Time.time;
             Vector2 offset = Random.insideUnitCircle * 0.18f;
             Vector2 spawnPos = position + offset + Vector2.up * 0.56f;
             int index = FindAvailableFloatTextIndex();
@@ -168,13 +191,20 @@ namespace Game.Gameplay.Feedback
             inst.Go.transform.position = new Vector3(spawnPos.x, spawnPos.y, -1f);
             inst.Go.transform.localScale = Vector3.one * m_floatTextStartScale;
             inst.Text.text = "+1";
-            inst.Text.color = new Color(0.55f, 1f, 0.38f, 1f);
+            inst.Text.color = new Color(0.55f, 1f, 0.38f, 0.82f);
             inst.Go.SetActive(true);
             m_floatTexts[index] = inst;
+            m_peakActiveFloatTexts = Mathf.Max(m_peakActiveFloatTexts, activeCount + 1);
         }
 
         private void SpawnImpact(Vector2 position)
         {
+            int activeCount = CountActiveImpacts();
+            if (activeCount >= Mathf.Min(m_maxActiveImpacts, m_impacts.Count))
+            {
+                return;
+            }
+
             int index = FindAvailableImpactIndex();
             ImpactInstance inst = m_impacts[index];
             inst.Active = true;
@@ -184,6 +214,7 @@ namespace Game.Gameplay.Feedback
             inst.Renderer.color = m_impactColor;
             inst.Go.SetActive(true);
             m_impacts[index] = inst;
+            m_peakActiveImpacts = Mathf.Max(m_peakActiveImpacts, activeCount + 1);
         }
 
         private int FindAvailableFloatTextIndex()
@@ -241,11 +272,11 @@ namespace Game.Gameplay.Feedback
                 TextMesh text = go.GetComponent<TextMesh>();
                 text.text = "+1";
                 text.font = m_defaultFont;
-                text.fontSize = 34;
-                text.characterSize = 0.08f;
+                text.fontSize = 28;
+                text.characterSize = 0.07f;
                 text.anchor = TextAnchor.MiddleCenter;
                 text.alignment = TextAlignment.Center;
-                text.color = new Color(0.55f, 1f, 0.38f, 1f);
+                text.color = new Color(0.55f, 1f, 0.38f, 0.82f);
 
                 MeshRenderer renderer = go.GetComponent<MeshRenderer>();
                 renderer.sortingOrder = 130;
@@ -315,6 +346,32 @@ namespace Game.Gameplay.Feedback
 
             texture.Apply();
             return Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), size);
+        }
+
+        private int CountActiveFloatTexts()
+        {
+            int count = 0;
+            for (int i = 0; i < m_floatTexts.Count; i++)
+            {
+                if (m_floatTexts[i].Active)
+                {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        private int CountActiveImpacts()
+        {
+            int count = 0;
+            for (int i = 0; i < m_impacts.Count; i++)
+            {
+                if (m_impacts[i].Active)
+                {
+                    count++;
+                }
+            }
+            return count;
         }
     }
 }

@@ -26,6 +26,10 @@ namespace Game.UI
         [Header("屏幕边缘脉冲")]
         [SerializeField] private float m_edgeThickness = 42f;
         [SerializeField] private float m_frenzyEdgeHoldAlpha = 0.1f;
+        [SerializeField] private float m_comboEdgePeakAlpha = 0.22f;
+        [SerializeField] private float m_burstEdgePeakAlpha = 0.16f;
+        [SerializeField] private float m_finalFrenzyEdgePeakAlpha = 0.36f;
+        [SerializeField] private float m_finalFrenzyPulseDuration = 0.72f;
 
         private Coroutine m_comboFadeCoroutine;
         private GameObject m_edgePulseRoot;
@@ -36,6 +40,7 @@ namespace Game.UI
 
         private void Awake()
         {
+            MobileSafeAreaUtility.ApplySafeArea(transform as RectTransform, 18f);
             EnsureComboText();
             if (m_camera == null)
             {
@@ -64,6 +69,7 @@ namespace Game.UI
 
             m_upgradePanelRect = upgradePanelRect;
 
+            MobileSafeAreaUtility.ApplySafeArea(transform as RectTransform, 18f);
             EnsureComboText();
             UpdateFloatingTextPosition();
 
@@ -149,14 +155,14 @@ namespace Game.UI
             }
 
             ShowFloatingText(text, color, fontSize);
-            PulseScreenEdge(color, combo >= 50 ? 0.3f : 0.22f, 0.28f);
+            PulseScreenEdge(color, combo >= 50 ? Mathf.Max(m_comboEdgePeakAlpha, 0.28f) : m_comboEdgePeakAlpha, 0.28f);
             if (GameAudioFeedback.Instance != null) GameAudioFeedback.Instance.PlayComboMilestone();
         }
 
         private void HandleBurstEvent(int count)
         {
             ShowFloatingText($"BURST x{count}!", new Color(1f, 1f, 0.3f), 34);
-            PulseScreenEdge(new Color(1f, 0.86f, 0.12f, 1f), 0.18f, 0.24f);
+            PulseScreenEdge(new Color(1f, 0.86f, 0.12f, 1f), m_burstEdgePeakAlpha, 0.24f);
             if (GameAudioFeedback.Instance != null) GameAudioFeedback.Instance.PlayBurst();
         }
 
@@ -271,7 +277,7 @@ namespace Game.UI
         private void StartFinalFrenzyEdgePulse()
         {
             m_frenzyEdgeActive = true;
-            PulseScreenEdge(new Color(1f, 0.24f, 0.06f, 1f), 0.42f, 0.72f);
+            PulseScreenEdge(new Color(1f, 0.24f, 0.06f, 1f), m_finalFrenzyEdgePeakAlpha, m_finalFrenzyPulseDuration);
         }
 
         private IEnumerator EdgePulseRoutine(Color color, float peakAlpha, float duration, float finalAlpha)

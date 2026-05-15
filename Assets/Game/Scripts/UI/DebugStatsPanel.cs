@@ -26,8 +26,15 @@ namespace Game.UI
         [SerializeField] private GameConfig m_gameConfig;
         [SerializeField] private HumanClusterSpawner m_clusterSpawner;
 
+        [Header("显示")]
+        [SerializeField] private bool m_visible = false;
+        [SerializeField] private KeyCode m_toggleKey = KeyCode.F3;
+        [SerializeField] private Vector2 m_screenOffset = new Vector2(14f, 14f);
+
         private PlayerStats m_playerStats;
-        private bool m_visible = true;
+        private InfectionJuiceFeedback m_juiceFeedback;
+        private InfectionVFXPool m_infectionVfxPool;
+        private InfectionBurstVFXPool m_burstVfxPool;
         private int m_lastBurstCount;
         private int m_maxObservedZombieCount;
         private GUIStyle m_labelStyle;
@@ -90,6 +97,7 @@ namespace Game.UI
             m_playerStats = playerStats;
             m_gameConfig = gameConfig;
             m_clusterSpawner = clusterSpawner;
+            CacheVfxPools();
 
             if (isActiveAndEnabled)
             {
@@ -115,7 +123,7 @@ namespace Game.UI
 #if !UNITY_EDITOR && !DEVELOPMENT_BUILD
             return;
 #else
-            if (Input.GetKeyDown(KeyCode.F3))
+            if (m_toggleKey != KeyCode.None && Input.GetKeyDown(m_toggleKey))
             {
                 m_visible = !m_visible;
             }
@@ -146,13 +154,13 @@ namespace Game.UI
 
             EnsureStyles();
 
-            float x = 10f;
-            float y = 10f;
-            float width = 480f;
+            float x = m_screenOffset.x;
+            float y = m_screenOffset.y;
+            float width = Mathf.Min(480f, Mathf.Max(360f, Screen.width - x * 2f));
             float lineHeight = 20f;
 
             // ===== 实时统计区 =====
-            int liveLineCount = 18;
+            int liveLineCount = 19;
             GUI.Box(new Rect(x - 6f, y - 6f, width + 12f, lineHeight * liveLineCount + 16f), string.Empty);
 
             GUI.Label(new Rect(x, y, width, lineHeight), "=== DEBUG STATS (F3) ===", m_headerStyle);
@@ -183,6 +191,9 @@ namespace Game.UI
             y += lineHeight;
 
             GUI.Label(new Rect(x, y, width, lineHeight), $"最近一次普通 InfectionBurst 数量: {m_lastBurstCount}", m_labelStyle);
+            y += lineHeight;
+
+            GUI.Label(new Rect(x, y, width, lineHeight), $"表现池: {BuildVfxPoolText()}", m_labelStyle);
             y += lineHeight;
 
             string rating = m_sessionController != null ? m_sessionController.CurrentRating.ToString() : "N/A";
@@ -595,6 +606,33 @@ namespace Game.UI
 
             m_headerStyle = new GUIStyle(GUI.skin.label) { fontSize = 14, fontStyle = FontStyle.Bold };
             m_headerStyle.normal.textColor = Color.yellow;
+        }
+
+        private void CacheVfxPools()
+        {
+            m_juiceFeedback = FindObjectOfType<InfectionJuiceFeedback>();
+            m_infectionVfxPool = FindObjectOfType<InfectionVFXPool>();
+            m_burstVfxPool = FindObjectOfType<InfectionBurstVFXPool>();
+        }
+
+        private string BuildVfxPoolText()
+        {
+            if (m_juiceFeedback == null || m_infectionVfxPool == null || m_burstVfxPool == null)
+            {
+                CacheVfxPools();
+            }
+
+            string juice = m_juiceFeedback != null
+                ? $"+1 {m_juiceFeedback.FloatTextPoolSize}/峰{m_juiceFeedback.PeakActiveFloatTexts} 闪白 {m_juiceFeedback.ImpactPoolSize}/峰{m_juiceFeedback.PeakActiveImpacts}"
+                : "+1 未绑定";
+            string ring = m_infectionVfxPool != null
+                ? $"小环 {m_infectionVfxPool.PoolSize}/峰{m_infectionVfxPool.PeakActiveEffects}"
+                : "小环 未绑定";
+            string burst = m_burstVfxPool != null
+                ? $"Burst环 {m_burstVfxPool.PoolSize}/峰{m_burstVfxPool.PeakActiveRings}"
+                : "Burst环 未绑定";
+
+            return $"{juice} | {ring} | {burst}";
         }
     }
 }

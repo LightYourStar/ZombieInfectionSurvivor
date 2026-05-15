@@ -14,7 +14,10 @@ namespace Game.Gameplay.Infection
     {
         [Header("配置")]
         [Tooltip("对象池大小，同时最多显示的特效数量")]
-        [SerializeField] private int m_poolSize = 20;
+        [SerializeField] private int m_poolSize = 40;
+
+        [Tooltip("同时显示的小型感染圆环上限，避免大量感染时遮挡画面")]
+        [SerializeField] private int m_maxActiveEffects = 28;
 
         [Tooltip("特效持续时间（秒）")]
         [SerializeField] private float m_effectDuration = 0.35f;
@@ -26,12 +29,16 @@ namespace Game.Gameplay.Infection
         [SerializeField] private float m_endScale = 1.8f;
 
         [Tooltip("特效颜色")]
-        [SerializeField] private Color m_effectColor = new Color(0.2f, 1f, 0.3f, 0.8f);
+        [SerializeField] private Color m_effectColor = new Color(0.2f, 1f, 0.3f, 0.55f);
 
         // ==================== 运行时状态 ====================
 
         private readonly List<VFXInstance> m_pool = new List<VFXInstance>();
         private Material m_sharedMaterial;
+        private int m_peakActiveEffects;
+
+        public int PoolSize => m_pool.Count;
+        public int PeakActiveEffects => m_peakActiveEffects;
 
         private struct VFXInstance
         {
@@ -96,6 +103,12 @@ namespace Game.Gameplay.Infection
 
         private void SpawnEffect(Vector2 position)
         {
+            int activeCount = CountActiveEffects();
+            if (activeCount >= Mathf.Min(m_maxActiveEffects, m_pool.Count))
+            {
+                return;
+            }
+
             // 从池中找一个空闲实例
             for (int i = 0; i < m_pool.Count; i++)
             {
@@ -112,6 +125,7 @@ namespace Game.Gameplay.Infection
                 inst.Renderer.color = m_effectColor;
                 inst.Go.SetActive(true);
                 m_pool[i] = inst;
+                m_peakActiveEffects = Mathf.Max(m_peakActiveEffects, activeCount + 1);
                 return;
             }
 
@@ -135,6 +149,7 @@ namespace Game.Gameplay.Infection
             oldest.Renderer.color = m_effectColor;
             oldest.Go.SetActive(true);
             m_pool[oldestIdx] = oldest;
+            m_peakActiveEffects = Mathf.Max(m_peakActiveEffects, activeCount + 1);
         }
 
         private void CreatePool()
@@ -143,7 +158,8 @@ namespace Game.Gameplay.Infection
             m_sharedMaterial = new Material(Shader.Find("Sprites/Default"));
             m_sharedMaterial.color = m_effectColor;
 
-            for (int i = 0; i < m_poolSize; i++)
+            int count = Mathf.Max(1, m_poolSize);
+            for (int i = 0; i < count; i++)
             {
                 GameObject go = new GameObject($"InfectionVFX_{i}");
                 go.transform.SetParent(transform, false);
@@ -202,6 +218,19 @@ namespace Game.Gameplay.Infection
 
             tex.Apply();
             return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+        }
+
+        private int CountActiveEffects()
+        {
+            int count = 0;
+            for (int i = 0; i < m_pool.Count; i++)
+            {
+                if (m_pool[i].Active)
+                {
+                    count++;
+                }
+            }
+            return count;
         }
     }
 }

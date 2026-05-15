@@ -12,16 +12,21 @@ namespace Game.Gameplay.Infection
     {
         [Header("Pool")]
         [SerializeField] private int m_poolSize = 24;
+        [SerializeField] private int m_maxActiveRings = 12;
         [SerializeField] private float m_duration = 0.42f;
 
         [Header("Visual")]
         [SerializeField] private float m_startRadiusMultiplier = 0.18f;
         [SerializeField] private float m_overshootMultiplier = 1.08f;
-        [SerializeField] private Color m_ringColor = new Color(0.85f, 1f, 0.22f, 0.9f);
+        [SerializeField] private Color m_ringColor = new Color(0.85f, 1f, 0.22f, 0.65f);
         [SerializeField] private int m_sortingOrder = 118;
 
         private readonly List<RingInstance> m_pool = new List<RingInstance>();
         private Sprite m_ringSprite;
+        private int m_peakActiveRings;
+
+        public int PoolSize => m_pool.Count;
+        public int PeakActiveRings => m_peakActiveRings;
 
         private struct RingInstance
         {
@@ -93,6 +98,12 @@ namespace Game.Gameplay.Infection
                 return;
             }
 
+            int activeCount = CountActiveRings();
+            if (activeCount >= Mathf.Min(m_maxActiveRings, m_pool.Count))
+            {
+                return;
+            }
+
             int index = FindAvailableIndex();
             RingInstance inst = m_pool[index];
             inst.Active = true;
@@ -103,6 +114,7 @@ namespace Game.Gameplay.Infection
             inst.Renderer.color = m_ringColor;
             inst.Go.SetActive(true);
             m_pool[index] = inst;
+            m_peakActiveRings = Mathf.Max(m_peakActiveRings, activeCount + 1);
 
             if (GameAudioFeedback.Instance != null)
             {
@@ -182,6 +194,19 @@ namespace Game.Gameplay.Infection
 
             texture.Apply();
             return Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), size);
+        }
+
+        private int CountActiveRings()
+        {
+            int count = 0;
+            for (int i = 0; i < m_pool.Count; i++)
+            {
+                if (m_pool[i].Active)
+                {
+                    count++;
+                }
+            }
+            return count;
         }
     }
 }

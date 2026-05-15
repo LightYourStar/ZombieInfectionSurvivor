@@ -8,9 +8,9 @@ namespace Game.UI
     public class MapDebugPanel : MonoBehaviour
     {
         [Header("显示")]
-        [SerializeField] private bool m_visible = true;
+        [SerializeField] private bool m_visible = false;
         [SerializeField] private KeyCode m_toggleKey = KeyCode.F4;
-        [SerializeField] private Vector2 m_screenOffset = new Vector2(10f, 10f);
+        [SerializeField] private Vector2 m_screenOffset = new Vector2(14f, 14f);
         [SerializeField, Min(360f)] private float m_width = 520f;
 
         [Header("依赖引用")]

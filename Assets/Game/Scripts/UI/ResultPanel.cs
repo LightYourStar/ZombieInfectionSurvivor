@@ -30,6 +30,8 @@ namespace Game.UI
 
         private GameObject m_runtimeRoot;
         private static Font s_defaultFont;
+        private const float MobileCardWidth = 440f;
+        private const float MobileCardHeight = 680f;
 
         // ==================== 生命周期 ====================
 
@@ -155,26 +157,31 @@ namespace Game.UI
             Image rootImage = m_runtimeRoot.GetComponent<Image>();
             rootImage.color = new Color(0.05f, 0.05f, 0.1f, 0.94f);
 
+            GameObject safeRoot = new GameObject("ResultSafeArea", typeof(RectTransform));
+            safeRoot.transform.SetParent(m_runtimeRoot.transform, false);
+            RectTransform safeRect = safeRoot.GetComponent<RectTransform>();
+            MobileSafeAreaUtility.ApplySafeArea(safeRect, 24f);
+
             GameObject card = new GameObject(
                 "ResultCard",
                 typeof(RectTransform),
                 typeof(CanvasRenderer),
                 typeof(Image),
                 typeof(VerticalLayoutGroup));
-            card.transform.SetParent(m_runtimeRoot.transform, false);
+            card.transform.SetParent(safeRoot.transform, false);
 
             RectTransform cardRect = card.GetComponent<RectTransform>();
             cardRect.anchorMin = new Vector2(0.5f, 0.5f);
             cardRect.anchorMax = new Vector2(0.5f, 0.5f);
             cardRect.pivot = new Vector2(0.5f, 0.5f);
             cardRect.anchoredPosition = Vector2.zero;
-            cardRect.sizeDelta = new Vector2(460f, 700f);
+            cardRect.sizeDelta = new Vector2(MobileCardWidth, MobileCardHeight);
 
             Image cardImage = card.GetComponent<Image>();
             cardImage.color = new Color(0.12f, 0.13f, 0.18f, 0.98f);
 
             VerticalLayoutGroup layout = card.GetComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(26, 26, 24, 24);
+            layout.padding = new RectOffset(24, 24, 22, 22);
             layout.spacing = 8f;
             layout.childAlignment = TextAnchor.UpperCenter;
             layout.childControlWidth = true;
@@ -245,7 +252,7 @@ namespace Game.UI
             layout.childAlignment = TextAnchor.MiddleCenter;
 
             LayoutElement gridLayout = grid.GetComponent<LayoutElement>();
-            gridLayout.preferredHeight = 242f;
+            gridLayout.preferredHeight = 232f;
 
             return grid.transform;
         }
@@ -361,17 +368,17 @@ namespace Game.UI
             image.color = new Color(0.24f, 0.68f, 0.38f, 1f);
 
             LayoutElement layout = buttonGO.GetComponent<LayoutElement>();
-            layout.preferredWidth = 240f;
-            layout.preferredHeight = 54f;
+            layout.preferredWidth = 280f;
+            layout.preferredHeight = 62f;
 
             RectTransform rect = buttonGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(240f, 54f);
+            rect.sizeDelta = new Vector2(280f, 62f);
 
             Text labelText = CreateStandaloneText(
                 "Text",
                 buttonGO.transform,
                 label,
-                24,
+                26,
                 Color.white,
                 FontStyle.Bold);
             RectTransform labelRect = labelText.GetComponent<RectTransform>();

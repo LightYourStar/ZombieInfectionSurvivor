@@ -21,6 +21,12 @@ namespace Game.UI
         [Tooltip("三个升级选项的文本标签")]
         [SerializeField] private Text[] m_optionTexts = new Text[3];
 
+        [Header("移动端布局")]
+        [SerializeField] private bool m_applyMobileLayout = true;
+        [SerializeField] private float m_safeAreaPadding = 28f;
+        [SerializeField] private Vector2 m_cardSize = new Vector2(330f, 88f);
+        [SerializeField] private float m_cardSpacing = 18f;
+
         // ==================== 运行时状态 ====================
 
         /// <summary>当前展示的选项列表</summary>
@@ -35,6 +41,8 @@ namespace Game.UI
 
         private void Awake()
         {
+            ApplyMobileLayout(3);
+
             for (int i = 0; i < m_optionButtons.Length; i++)
             {
                 if (m_optionButtons[i] != null)
@@ -68,6 +76,7 @@ namespace Game.UI
             m_currentOptions = options;
             m_onOptionSelected = onSelected;
             m_selectionLocked = false;
+            ApplyMobileLayout(options != null ? options.Count : 0);
 
             for (int i = 0; i < m_optionButtons.Length; i++)
             {
@@ -77,7 +86,7 @@ namespace Game.UI
                     m_optionButtons[i].transform.localScale = Vector3.one;
                 }
 
-                if (i < options.Count)
+                if (options != null && i < options.Count)
                 {
                     if (m_optionButtons[i] != null)
                     {
@@ -169,6 +178,49 @@ namespace Game.UI
                 if (m_optionButtons[i] != null)
                 {
                     m_optionButtons[i].interactable = interactable;
+                }
+            }
+        }
+
+        private void ApplyMobileLayout(int activeCount)
+        {
+            if (!m_applyMobileLayout)
+            {
+                return;
+            }
+
+            RectTransform root = transform as RectTransform;
+            MobileSafeAreaUtility.ApplySafeArea(root, m_safeAreaPadding);
+
+            int visibleCount = Mathf.Clamp(activeCount <= 0 ? m_optionButtons.Length : activeCount, 1, m_optionButtons.Length);
+            float step = m_cardSize.y + m_cardSpacing;
+            float startY = (visibleCount - 1) * step * 0.5f;
+
+            for (int i = 0; i < m_optionButtons.Length; i++)
+            {
+                Button button = m_optionButtons[i];
+                if (button == null)
+                {
+                    continue;
+                }
+
+                RectTransform rect = button.GetComponent<RectTransform>();
+                if (rect != null)
+                {
+                    rect.anchorMin = new Vector2(0.5f, 0.5f);
+                    rect.anchorMax = new Vector2(0.5f, 0.5f);
+                    rect.pivot = new Vector2(0.5f, 0.5f);
+                    rect.sizeDelta = m_cardSize;
+                    rect.anchoredPosition = new Vector2(0f, startY - i * step);
+                }
+
+                Text label = i < m_optionTexts.Length ? m_optionTexts[i] : null;
+                if (label != null)
+                {
+                    label.fontSize = 20;
+                    label.alignment = TextAnchor.MiddleCenter;
+                    label.horizontalOverflow = HorizontalWrapMode.Wrap;
+                    label.verticalOverflow = VerticalWrapMode.Truncate;
                 }
             }
         }

@@ -264,8 +264,10 @@ namespace Game.Core
 
             // 12. 确保感染 VFX 池已创建并激活（自动订阅 OnInfectionSuccess）
             EnsureInfectionVFXPool();
+            EnsureInfectionBurstVFXPool();
             EnsureJuiceFeedback();
             EnsureAudioFeedback();
+            EnsureInfectionFeedbackDisplay();
             InitializeDebugTools();
 
             // 13. 确保状态机处于 Start 状态
@@ -871,6 +873,16 @@ namespace Game.Core
             vfxGo.AddComponent<InfectionVFXPool>();
         }
 
+        private void EnsureInfectionBurstVFXPool()
+        {
+            InfectionBurstVFXPool existing = FindObjectOfType<InfectionBurstVFXPool>();
+            if (existing != null) return;
+
+            GameObject vfxGo = new GameObject("InfectionBurstVFXPool");
+            vfxGo.transform.SetParent(transform, false);
+            vfxGo.AddComponent<InfectionBurstVFXPool>();
+        }
+
         private void EnsureJuiceFeedback()
         {
             if (FindObjectOfType<InfectionJuiceFeedback>() != null) return;
@@ -887,6 +899,42 @@ namespace Game.Core
             GameObject go = new GameObject("GameAudioFeedback");
             go.transform.SetParent(transform, false);
             go.AddComponent<GameAudioFeedback>();
+        }
+
+        private void EnsureInfectionFeedbackDisplay()
+        {
+            InfectionFeedbackDisplay display = FindObjectOfType<InfectionFeedbackDisplay>();
+            Canvas canvas = FindObjectOfType<Canvas>();
+
+            if (canvas == null)
+            {
+                GameObject canvasObject = new GameObject("RuntimeFeedbackCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+                canvas = canvasObject.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+                CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1080f, 1920f);
+                scaler.matchWidthOrHeight = 0.5f;
+            }
+
+            if (display == null)
+            {
+                GameObject feedbackObject = new GameObject("InfectionFeedbackDisplay", typeof(RectTransform));
+                feedbackObject.transform.SetParent(canvas.transform, false);
+                display = feedbackObject.AddComponent<InfectionFeedbackDisplay>();
+            }
+
+            Camera targetCamera = Camera.main;
+            if (targetCamera == null)
+            {
+                targetCamera = FindObjectOfType<Camera>();
+            }
+
+            display.Initialize(
+                EnsureComboTracker(),
+                targetCamera,
+                m_upgradePanel != null ? m_upgradePanel.GetComponent<RectTransform>() : null);
         }
 
         /// <summary>

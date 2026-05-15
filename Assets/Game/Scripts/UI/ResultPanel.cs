@@ -1,5 +1,6 @@
 using System;
 using Game.Core;
+using Game.Gameplay.Feedback;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,6 +23,9 @@ namespace Game.UI
         private Text m_performanceSummaryText;
         private Text m_maxComboText;
         private Text m_frenzyInfectedText;
+        private Text m_playerDirectInfectedText;
+        private Text m_zombieInfectedText;
+        private Text m_burstInfectedText;
         private Text m_upgradeSummaryText;
 
         private GameObject m_runtimeRoot;
@@ -58,11 +62,28 @@ namespace Game.UI
             if (m_frenzyInfectedText != null)
                 m_frenzyInfectedText.text = result.FrenzyInfectedCount > 0 ? result.FrenzyInfectedCount.ToString() : "未触发";
 
+            if (m_playerDirectInfectedText != null)
+                m_playerDirectInfectedText.text = result.PlayerDirectInfectedCount.ToString();
+
+            if (m_zombieInfectedText != null)
+                m_zombieInfectedText.text = result.ZombieInfectedCount.ToString();
+
+            if (m_burstInfectedText != null)
+                m_burstInfectedText.text = result.BurstInfectedCount.ToString();
+
             if (m_ratingText != null)
+            {
                 m_ratingText.text = result.Rating.ToString();
+                ApplyRatingPresentation(result.Rating);
+            }
 
             if (m_victoryStatusText != null)
+            {
                 m_victoryStatusText.text = result.IsVictory ? "胜利" : "未达成";
+                m_victoryStatusText.color = result.IsVictory
+                    ? new Color(0.96f, 0.92f, 0.68f, 1f)
+                    : new Color(0.88f, 0.88f, 0.92f, 1f);
+            }
 
             if (m_performanceSummaryText != null)
                 m_performanceSummaryText.text = BuildPerformanceSummary(result);
@@ -70,13 +91,21 @@ namespace Game.UI
             if (m_upgradeSummaryText != null)
                 m_upgradeSummaryText.text = result.UpgradeSummary;
 
-            m_restartButton.onClick.RemoveAllListeners();
-            if (onRestart != null)
+            if (m_restartButton != null)
             {
-                m_restartButton.onClick.AddListener(() => onRestart());
+                m_restartButton.onClick.RemoveAllListeners();
+                if (onRestart != null)
+                {
+                    m_restartButton.onClick.AddListener(() => onRestart());
+                }
             }
 
             SetVisible(true);
+
+            if (GameAudioFeedback.Instance != null)
+            {
+                GameAudioFeedback.Instance.PlayResult();
+            }
         }
 
         /// <summary>
@@ -94,6 +123,9 @@ namespace Game.UI
                 m_maxZombieCountText != null &&
                 m_maxComboText != null &&
                 m_performanceSummaryText != null &&
+                m_playerDirectInfectedText != null &&
+                m_zombieInfectedText != null &&
+                m_burstInfectedText != null &&
                 m_ratingText != null &&
                 m_victoryStatusText != null &&
                 m_restartButton != null;
@@ -105,7 +137,8 @@ namespace Game.UI
 
             if (m_runtimeRoot != null)
             {
-                return;
+                Destroy(m_runtimeRoot);
+                m_runtimeRoot = null;
             }
 
             Transform parent = transform.parent != null ? transform.parent : transform;
@@ -127,8 +160,7 @@ namespace Game.UI
                 typeof(RectTransform),
                 typeof(CanvasRenderer),
                 typeof(Image),
-                typeof(VerticalLayoutGroup),
-                typeof(ContentSizeFitter));
+                typeof(VerticalLayoutGroup));
             card.transform.SetParent(m_runtimeRoot.transform, false);
 
             RectTransform cardRect = card.GetComponent<RectTransform>();
@@ -136,89 +168,121 @@ namespace Game.UI
             cardRect.anchorMax = new Vector2(0.5f, 0.5f);
             cardRect.pivot = new Vector2(0.5f, 0.5f);
             cardRect.anchoredPosition = Vector2.zero;
-            cardRect.sizeDelta = new Vector2(440f, 0f);
+            cardRect.sizeDelta = new Vector2(460f, 700f);
 
             Image cardImage = card.GetComponent<Image>();
             cardImage.color = new Color(0.12f, 0.13f, 0.18f, 0.98f);
 
             VerticalLayoutGroup layout = card.GetComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(28, 28, 28, 28);
-            layout.spacing = 14f;
+            layout.padding = new RectOffset(26, 26, 24, 24);
+            layout.spacing = 8f;
             layout.childAlignment = TextAnchor.UpperCenter;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
-            ContentSizeFitter fitter = card.GetComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
             m_victoryStatusText = CreateStandaloneText(
                 "VictoryStatusText",
                 card.transform,
                 "胜利",
-                34,
+                30,
                 new Color(0.96f, 0.92f, 0.68f, 1f),
                 FontStyle.Bold);
+            SetPreferredHeight(m_victoryStatusText.gameObject, 42f);
 
             m_performanceSummaryText = CreateStandaloneText(
                 "PerformanceSummaryText",
                 card.transform,
                 "Good run",
-                20,
+                18,
                 new Color(1f, 0.82f, 0.28f, 1f),
                 FontStyle.Bold);
+            SetPreferredHeight(m_performanceSummaryText.gameObject, 30f);
 
-            m_infectedCountText = CreateStatRow(card.transform, "总感染数", "127");
-            m_maxZombieCountText = CreateStatRow(card.transform, "最高僵尸数", "45");
-            m_maxComboText = CreateStatRow(card.transform, "最高连击", "x12");
-            m_frenzyInfectedText = CreateStatRow(card.transform, "狂潮阶段感染", "38");
-            m_ratingText = CreateStatRow(card.transform, "最终评级", "A");
+            m_ratingText = CreateRatingText(card.transform);
+
+            Transform statGrid = CreateStatGrid(card.transform);
+            m_infectedCountText = CreateStatTile(statGrid, "总感染", "127");
+            m_maxZombieCountText = CreateStatTile(statGrid, "最高僵尸", "45");
+            m_maxComboText = CreateStatTile(statGrid, "最高连击", "x12");
+            m_playerDirectInfectedText = CreateStatTile(statGrid, "主角感染", "32");
+            m_zombieInfectedText = CreateStatTile(statGrid, "僵尸感染", "72");
+            m_burstInfectedText = CreateStatTile(statGrid, "爆发感染", "23");
+            m_frenzyInfectedText = CreateStatTile(statGrid, "狂潮感染", "38");
             m_upgradeSummaryText = CreateWideStatRow(card.transform, "本局升级", "无");
 
             m_restartButton = CreateButton(card.transform, "RestartButton", "再来一局");
         }
 
-        private Text CreateStatRow(Transform parent, string label, string exampleValue)
+        private Text CreateRatingText(Transform parent)
         {
-            GameObject row = new GameObject(
-                label + "Row",
-                typeof(RectTransform),
-                typeof(HorizontalLayoutGroup),
-                typeof(LayoutElement));
-            row.transform.SetParent(parent, false);
-
-            HorizontalLayoutGroup layout = row.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 12f;
-            layout.childAlignment = TextAnchor.MiddleCenter;
-            layout.childControlWidth = false;
-            layout.childControlHeight = true;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-
-            LayoutElement rowLayout = row.GetComponent<LayoutElement>();
-            rowLayout.preferredHeight = 42f;
-
-            Text labelText = CreateStandaloneText(
-                label + "Label",
-                row.transform,
-                label,
-                22,
-                new Color(0.82f, 0.84f, 0.9f, 1f),
-                FontStyle.Normal);
-            LayoutElement labelLayout = labelText.gameObject.AddComponent<LayoutElement>();
-            labelLayout.preferredWidth = 220f;
-
-            Text valueText = CreateStandaloneText(
-                label + "Value",
-                row.transform,
-                exampleValue,
-                24,
+            Text text = CreateStandaloneText(
+                "RatingValue",
+                parent,
+                "A",
+                44,
                 Color.white,
                 FontStyle.Bold);
-            LayoutElement valueLayout = valueText.gameObject.AddComponent<LayoutElement>();
-            valueLayout.preferredWidth = 120f;
+            SetPreferredHeight(text.gameObject, 66f);
+            return text;
+        }
+
+        private Transform CreateStatGrid(Transform parent)
+        {
+            GameObject grid = new GameObject(
+                "HighlightStats",
+                typeof(RectTransform),
+                typeof(GridLayoutGroup),
+                typeof(LayoutElement));
+            grid.transform.SetParent(parent, false);
+
+            GridLayoutGroup layout = grid.GetComponent<GridLayoutGroup>();
+            layout.cellSize = new Vector2(190f, 54f);
+            layout.spacing = new Vector2(10f, 8f);
+            layout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            layout.constraintCount = 2;
+            layout.childAlignment = TextAnchor.MiddleCenter;
+
+            LayoutElement gridLayout = grid.GetComponent<LayoutElement>();
+            gridLayout.preferredHeight = 242f;
+
+            return grid.transform;
+        }
+
+        private Text CreateStatTile(Transform parent, string label, string exampleValue)
+        {
+            GameObject tile = new GameObject(
+                label + "Tile",
+                typeof(RectTransform),
+                typeof(VerticalLayoutGroup));
+            tile.transform.SetParent(parent, false);
+
+            VerticalLayoutGroup layout = tile.GetComponent<VerticalLayoutGroup>();
+            layout.spacing = 0f;
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            Text labelText = CreateStandaloneText(
+                "Label",
+                tile.transform,
+                label,
+                15,
+                new Color(0.72f, 0.75f, 0.84f, 1f),
+                FontStyle.Normal);
+            SetPreferredHeight(labelText.gameObject, 22f);
+
+            Text valueText = CreateStandaloneText(
+                "Value",
+                tile.transform,
+                exampleValue,
+                22,
+                Color.white,
+                FontStyle.Bold);
+            SetPreferredHeight(valueText.gameObject, 28f);
 
             return valueText;
         }
@@ -244,10 +308,8 @@ namespace Game.UI
             vlayout.childForceExpandWidth = true;
             vlayout.childForceExpandHeight = false;
 
-            // 使用 ContentSizeFitter 让行高自适应内容，不固定高度
             LayoutElement rowLayout = row.GetComponent<LayoutElement>();
-            rowLayout.minHeight = 48f;
-            rowLayout.flexibleHeight = 1f;
+            rowLayout.preferredHeight = 74f;
 
             ContentSizeFitter rowFitter = row.GetComponent<ContentSizeFitter>();
             rowFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
@@ -257,7 +319,7 @@ namespace Game.UI
                 label + "Label",
                 row.transform,
                 label,
-                18,
+                15,
                 new Color(0.7f, 0.72f, 0.8f, 1f),
                 FontStyle.Normal);
 
@@ -268,7 +330,7 @@ namespace Game.UI
             Text valueText = valueGo.GetComponent<Text>();
             valueText.text = exampleValue;
             valueText.font = GetDefaultFont();
-            valueText.fontSize = 16;
+            valueText.fontSize = 15;
             valueText.fontStyle = FontStyle.Normal;
             valueText.alignment = TextAnchor.UpperCenter;
             valueText.color = new Color(0.95f, 0.95f, 0.8f, 1f);
@@ -276,11 +338,10 @@ namespace Game.UI
             valueText.verticalOverflow = VerticalWrapMode.Overflow;
 
             LayoutElement valueLayout = valueGo.GetComponent<LayoutElement>();
-            valueLayout.minHeight = 24f;
-            valueLayout.flexibleHeight = 1f;
+            valueLayout.preferredHeight = 40f;
 
             RectTransform valueRect = valueGo.GetComponent<RectTransform>();
-            valueRect.sizeDelta = new Vector2(0f, 24f);
+            valueRect.sizeDelta = new Vector2(0f, 40f);
 
             return valueText;
         }
@@ -300,11 +361,11 @@ namespace Game.UI
             image.color = new Color(0.24f, 0.68f, 0.38f, 1f);
 
             LayoutElement layout = buttonGO.GetComponent<LayoutElement>();
-            layout.preferredWidth = 220f;
-            layout.preferredHeight = 56f;
+            layout.preferredWidth = 240f;
+            layout.preferredHeight = 54f;
 
             RectTransform rect = buttonGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(220f, 56f);
+            rect.sizeDelta = new Vector2(240f, 54f);
 
             Text labelText = CreateStandaloneText(
                 "Text",
@@ -345,6 +406,46 @@ namespace Game.UI
             rect.sizeDelta = new Vector2(0f, fontSize + 16f);
 
             return text;
+        }
+
+        private void SetPreferredHeight(GameObject go, float height)
+        {
+            LayoutElement layout = go.GetComponent<LayoutElement>();
+            if (layout == null)
+            {
+                layout = go.AddComponent<LayoutElement>();
+            }
+
+            layout.preferredHeight = height;
+        }
+
+        private void ApplyRatingPresentation(SessionRating rating)
+        {
+            if (m_ratingText == null)
+            {
+                return;
+            }
+
+            m_ratingText.color = GetRatingColor(rating);
+            m_ratingText.fontStyle = FontStyle.Bold;
+            m_ratingText.fontSize = rating == SessionRating.SS ? 54 : (rating == SessionRating.S ? 50 : 42);
+        }
+
+        private Color GetRatingColor(SessionRating rating)
+        {
+            switch (rating)
+            {
+                case SessionRating.SS:
+                    return new Color(1f, 0.82f, 0.16f, 1f);
+                case SessionRating.S:
+                    return new Color(1f, 0.48f, 0.16f, 1f);
+                case SessionRating.A:
+                    return new Color(0.48f, 0.95f, 0.56f, 1f);
+                case SessionRating.B:
+                    return new Color(0.74f, 0.88f, 1f, 1f);
+                default:
+                    return Color.white;
+            }
         }
 
         private string BuildPerformanceSummary(SessionResult result)

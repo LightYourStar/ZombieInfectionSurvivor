@@ -95,7 +95,7 @@ namespace Game.Gameplay.Feedback
                 m_maxCombo = m_currentCombo;
             }
 
-            if (m_currentCombo == 5 || m_currentCombo == 10 ||
+            if (m_currentCombo == 10 ||
                 m_currentCombo == 25 || m_currentCombo == 50 || m_currentCombo == 100)
             {
                 OnComboMilestone?.Invoke(m_currentCombo);

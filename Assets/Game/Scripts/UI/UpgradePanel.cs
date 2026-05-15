@@ -1,5 +1,7 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using Game.Gameplay.Feedback;
 using Game.Gameplay.Skill;
 using UnityEngine;
 using UnityEngine.UI;
@@ -26,6 +28,8 @@ namespace Game.UI
 
         /// <summary>选择回调，由外部（GameSystemRunner）注入</summary>
         private Action<UpgradeOption> m_onOptionSelected;
+        private Coroutine m_selectionCoroutine;
+        private bool m_selectionLocked;
 
         // ==================== 生命周期 ====================
 
@@ -63,9 +67,16 @@ namespace Game.UI
         {
             m_currentOptions = options;
             m_onOptionSelected = onSelected;
+            m_selectionLocked = false;
 
             for (int i = 0; i < m_optionButtons.Length; i++)
             {
+                if (m_optionButtons[i] != null)
+                {
+                    m_optionButtons[i].interactable = true;
+                    m_optionButtons[i].transform.localScale = Vector3.one;
+                }
+
                 if (i < options.Count)
                 {
                     if (m_optionButtons[i] != null)
@@ -91,13 +102,75 @@ namespace Game.UI
 
         private void OnButtonClicked(int index)
         {
+            if (m_selectionLocked)
+            {
+                return;
+            }
+
             if (m_currentOptions == null || index < 0 || index >= m_currentOptions.Count)
             {
                 return;
             }
 
             UpgradeOption selected = m_currentOptions[index];
+            if (m_selectionCoroutine != null)
+            {
+                StopCoroutine(m_selectionCoroutine);
+            }
+
+            m_selectionCoroutine = StartCoroutine(PlaySelectionFeedback(index, selected));
+        }
+
+        private IEnumerator PlaySelectionFeedback(int index, UpgradeOption selected)
+        {
+            m_selectionLocked = true;
+            SetButtonsInteractable(false);
+
+            if (GameAudioFeedback.Instance != null)
+            {
+                GameAudioFeedback.Instance.PlayUpgradeSelected();
+            }
+
+            Transform selectedTransform = index >= 0 && index < m_optionButtons.Length && m_optionButtons[index] != null
+                ? m_optionButtons[index].transform
+                : null;
+
+            if (selectedTransform != null)
+            {
+                Vector3 originalScale = selectedTransform.localScale;
+                yield return ScaleSelectedCard(selectedTransform, originalScale, originalScale * 1.1f, 0.1f);
+                yield return ScaleSelectedCard(selectedTransform, selectedTransform.localScale, originalScale, 0.08f);
+            }
+
+            m_selectionCoroutine = null;
             m_onOptionSelected?.Invoke(selected);
+        }
+
+        private IEnumerator ScaleSelectedCard(Transform target, Vector3 from, Vector3 to, float duration)
+        {
+            float elapsed = 0f;
+            float safeDuration = Mathf.Max(0.01f, duration);
+
+            while (elapsed < safeDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / safeDuration);
+                target.localScale = Vector3.Lerp(from, to, 1f - Mathf.Pow(1f - t, 3f));
+                yield return null;
+            }
+
+            target.localScale = to;
+        }
+
+        private void SetButtonsInteractable(bool interactable)
+        {
+            for (int i = 0; i < m_optionButtons.Length; i++)
+            {
+                if (m_optionButtons[i] != null)
+                {
+                    m_optionButtons[i].interactable = interactable;
+                }
+            }
         }
     }
 }

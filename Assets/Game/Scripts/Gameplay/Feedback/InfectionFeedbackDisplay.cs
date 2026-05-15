@@ -8,7 +8,7 @@ namespace Game.UI
 {
     /// <summary>
     /// 感染反馈显示器。
-    /// 在开发环境中显示连击里程碑文本与大感染事件反馈。
+    /// 显示连击里程碑、爆发提示和 Final Frenzy 屏幕边缘反馈。
     /// </summary>
     public class InfectionFeedbackDisplay : MonoBehaviour
     {
@@ -20,14 +20,19 @@ namespace Game.UI
         [SerializeField] private RectTransform m_upgradePanelRect;
         [SerializeField] private float m_upgradePanelTopOffset = 56f;
 
-        [Header("屏幕震动")]
+        [Header("相机引用")]
         [SerializeField] private Camera m_camera;
-        [SerializeField] private float m_shakeIntensity = 0.15f;
-        [SerializeField] private float m_shakeDuration = 0.12f;
+
+        [Header("屏幕边缘脉冲")]
+        [SerializeField] private float m_edgeThickness = 42f;
+        [SerializeField] private float m_frenzyEdgeHoldAlpha = 0.1f;
 
         private Coroutine m_comboFadeCoroutine;
-        private Vector3 m_cameraOriginalPos;
-        private Coroutine m_shakeCoroutine;
+        private GameObject m_edgePulseRoot;
+        private CanvasGroup m_edgePulseCanvasGroup;
+        private Image[] m_edgeImages;
+        private Coroutine m_edgePulseCoroutine;
+        private bool m_frenzyEdgeActive;
 
         private void Awake()
         {
@@ -46,6 +51,7 @@ namespace Game.UI
         private void OnDisable()
         {
             UnsubscribeEvents();
+            HideEdgePulseImmediate();
         }
 
         public void Initialize(Game.Gameplay.Feedback.InfectionComboTracker comboTracker, Camera camera, RectTransform upgradePanelRect)
@@ -72,8 +78,10 @@ namespace Game.UI
         {
             GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
             GameEvents.OnLevelUp -= HandleLevelUp;
+            GameEvents.OnSessionStateChanged -= HandleSessionStateChanged;
             GameEvents.OnFinalFrenzyStarted += HandleFinalFrenzyStarted;
             GameEvents.OnLevelUp += HandleLevelUp;
+            GameEvents.OnSessionStateChanged += HandleSessionStateChanged;
 
             if (m_comboTracker != null)
             {
@@ -88,6 +96,7 @@ namespace Game.UI
         {
             GameEvents.OnFinalFrenzyStarted -= HandleFinalFrenzyStarted;
             GameEvents.OnLevelUp -= HandleLevelUp;
+            GameEvents.OnSessionStateChanged -= HandleSessionStateChanged;
 
             if (m_comboTracker != null)
             {
@@ -140,24 +149,38 @@ namespace Game.UI
             }
 
             ShowFloatingText(text, color, fontSize);
+            PulseScreenEdge(color, combo >= 50 ? 0.3f : 0.22f, 0.28f);
             if (GameAudioFeedback.Instance != null) GameAudioFeedback.Instance.PlayComboMilestone();
         }
 
         private void HandleBurstEvent(int count)
         {
             ShowFloatingText($"BURST x{count}!", new Color(1f, 1f, 0.3f), 34);
+            PulseScreenEdge(new Color(1f, 0.86f, 0.12f, 1f), 0.18f, 0.24f);
             if (GameAudioFeedback.Instance != null) GameAudioFeedback.Instance.PlayBurst();
         }
 
         private void HandleFinalFrenzyStarted()
         {
-            ShowFloatingText("末日狂潮!", new Color(1f, 0.36f, 0.12f), 44);
+            ShowFloatingText("FINAL FRENZY", new Color(1f, 0.36f, 0.12f), 48);
+            StartFinalFrenzyEdgePulse();
             if (GameAudioFeedback.Instance != null) GameAudioFeedback.Instance.PlayFinalFrenzyStart();
         }
 
         private void HandleLevelUp(int level)
         {
             ShowFloatingText($"LEVEL {level}!", new Color(0.58f, 1f, 0.5f), 34);
+        }
+
+        private void HandleSessionStateChanged(SessionState state)
+        {
+            if (state != SessionState.Playing)
+            {
+                HideEdgePulseImmediate();
+                return;
+            }
+
+            HideEdgePulseImmediate();
         }
 
         private void ShowFloatingText(string text, Color color, int fontSize)
@@ -228,14 +251,148 @@ namespace Game.UI
             m_comboFadeCoroutine = null;
         }
 
-        /// <summary>
-        /// 屏幕震动已禁用：直接移动摄像机在 2D 俯视角中体验像卡顿而非震动。
-        /// 保留方法签名以备后续替换为更合适的反馈方式（如 UI 抖动或后处理）。
-        /// </summary>
-        private IEnumerator ScreenShake()
+        private void PulseScreenEdge(Color color, float peakAlpha, float duration)
         {
-            // [已禁用] 震屏在移动端 2D 俯视角中体验为卡顿，暂不启用
-            yield break;
+            EnsureEdgePulseBuilt();
+            if (m_edgePulseRoot == null)
+            {
+                return;
+            }
+
+            if (m_edgePulseCoroutine != null)
+            {
+                StopCoroutine(m_edgePulseCoroutine);
+            }
+
+            float finalAlpha = m_frenzyEdgeActive ? m_frenzyEdgeHoldAlpha : 0f;
+            m_edgePulseCoroutine = StartCoroutine(EdgePulseRoutine(color, peakAlpha, duration, finalAlpha));
+        }
+
+        private void StartFinalFrenzyEdgePulse()
+        {
+            m_frenzyEdgeActive = true;
+            PulseScreenEdge(new Color(1f, 0.24f, 0.06f, 1f), 0.42f, 0.72f);
+        }
+
+        private IEnumerator EdgePulseRoutine(Color color, float peakAlpha, float duration, float finalAlpha)
+        {
+            SetEdgeColor(color);
+            m_edgePulseRoot.SetActive(true);
+
+            float elapsed = 0f;
+            float halfDuration = Mathf.Max(0.04f, duration * 0.5f);
+            while (elapsed < halfDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / halfDuration);
+                m_edgePulseCanvasGroup.alpha = Mathf.Lerp(finalAlpha, peakAlpha, t);
+                yield return null;
+            }
+
+            elapsed = 0f;
+            while (elapsed < halfDuration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / halfDuration);
+                m_edgePulseCanvasGroup.alpha = Mathf.Lerp(peakAlpha, finalAlpha, t);
+                yield return null;
+            }
+
+            m_edgePulseCanvasGroup.alpha = finalAlpha;
+            if (finalAlpha <= 0f)
+            {
+                m_edgePulseRoot.SetActive(false);
+            }
+
+            m_edgePulseCoroutine = null;
+        }
+
+        private void HideEdgePulseImmediate()
+        {
+            m_frenzyEdgeActive = false;
+
+            if (m_edgePulseCoroutine != null)
+            {
+                StopCoroutine(m_edgePulseCoroutine);
+                m_edgePulseCoroutine = null;
+            }
+
+            if (m_edgePulseCanvasGroup != null)
+            {
+                m_edgePulseCanvasGroup.alpha = 0f;
+            }
+
+            if (m_edgePulseRoot != null)
+            {
+                m_edgePulseRoot.SetActive(false);
+            }
+        }
+
+        private void EnsureEdgePulseBuilt()
+        {
+            if (m_edgePulseRoot != null)
+            {
+                return;
+            }
+
+            GameObject root = new GameObject("EdgePulse", typeof(RectTransform), typeof(CanvasGroup));
+            root.transform.SetParent(transform, false);
+
+            RectTransform rootRect = root.GetComponent<RectTransform>();
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
+
+            m_edgePulseCanvasGroup = root.GetComponent<CanvasGroup>();
+            m_edgePulseCanvasGroup.alpha = 0f;
+            m_edgePulseCanvasGroup.blocksRaycasts = false;
+            m_edgePulseCanvasGroup.interactable = false;
+
+            m_edgeImages = new Image[4];
+            m_edgeImages[0] = CreateEdgeImage(root.transform, "Top", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, m_edgeThickness));
+            m_edgeImages[1] = CreateEdgeImage(root.transform, "Bottom", Vector2.zero, new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, m_edgeThickness));
+            m_edgeImages[2] = CreateEdgeImage(root.transform, "Left", Vector2.zero, new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(m_edgeThickness, 0f));
+            m_edgeImages[3] = CreateEdgeImage(root.transform, "Right", new Vector2(1f, 0f), Vector2.one, new Vector2(1f, 0.5f), new Vector2(m_edgeThickness, 0f));
+
+            m_edgePulseRoot = root;
+            root.SetActive(false);
+        }
+
+        private Image CreateEdgeImage(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 sizeDelta)
+        {
+            GameObject go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(parent, false);
+
+            RectTransform rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.pivot = pivot;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            rect.sizeDelta = sizeDelta;
+            rect.anchoredPosition = Vector2.zero;
+
+            Image image = go.GetComponent<Image>();
+            image.color = Color.white;
+            image.raycastTarget = false;
+            return image;
+        }
+
+        private void SetEdgeColor(Color color)
+        {
+            if (m_edgeImages == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < m_edgeImages.Length; i++)
+            {
+                if (m_edgeImages[i] != null)
+                {
+                    m_edgeImages[i].color = color;
+                }
+            }
         }
 
         private void EnsureComboText()

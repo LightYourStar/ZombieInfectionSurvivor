@@ -132,6 +132,11 @@ namespace Game.Core
             // 收集结算数据
             int maxCombo = m_comboTracker != null ? m_comboTracker.MaxCombo : 0;
             int frenzyInfected = m_frenzyStarted ? (m_infectedCount - m_infectedCountAtFrenzyStart) : 0;
+            int playerDirectInfected = m_infectionSystem != null ? m_infectionSystem.PlayerDirectInfections : 0;
+            int zombieInfected = m_infectionSystem != null ? m_infectionSystem.ZombieInfections : 0;
+            int burstInfected = m_infectionSystem != null
+                ? m_infectionSystem.BurstInfections + m_infectionSystem.EchoBurstInfections
+                : 0;
             string upgradeSummary = BuildUpgradeSummary();
 
             var result = new SessionResult(
@@ -142,7 +147,10 @@ namespace Game.Core
                 m_currentRating,
                 m_isVictory,
                 m_elapsedTime,
-                upgradeSummary
+                upgradeSummary,
+                playerDirectInfected,
+                zombieInfected,
+                burstInfected
             );
 
             OnSessionEnd?.Invoke(result);

@@ -112,8 +112,15 @@ namespace Game.Gameplay.Infection
 
         // ==================== 公开属性 ====================
 
-        /// <summary>当前活跃 ZombieCompanion 数量</summary>
-        public int ActiveZombieCount => m_activeZombies.Count;
+        /// <summary>当前活跃 ZombieCompanion 数量（已清理无效引用后）</summary>
+        public int ActiveZombieCount
+        {
+            get
+            {
+                CleanupInactiveZombies();
+                return m_activeZombies.Count;
+            }
+        }
 
         /// <summary>
         /// 活跃 ZombieCompanion 的只读列表。
@@ -273,6 +280,7 @@ namespace Game.Gameplay.Infection
             }
 
             // 上限约束（Requirement 5.4）：达到上限时不生成新 ZombieCompanion，但感染本身仍然成功
+            CleanupInactiveZombies();
             if (m_activeZombies.Count >= m_playerStats.ZombieCompanionCap)
             {
                 return true;
@@ -394,6 +402,20 @@ namespace Game.Gameplay.Infection
             if (deltaTime <= 0f)
             {
                 return;
+            }
+
+            // 每帧清理无效僵尸引用
+            CleanupInactiveZombies();
+
+            // 安全检查：超限 Warning（限频，每 60 帧最多一次）
+            if (m_playerStats != null && m_activeZombies.Count > m_playerStats.ZombieCompanionCap)
+            {
+                if (Time.frameCount % 60 == 0)
+                {
+                    int baseCap = m_config != null ? m_config.ZombieCompanionMaxCount : 0;
+                    int bonus = m_playerStats.ZombieCompanionCap - baseCap;
+                    Debug.LogWarning($"[InfectionSystem] 僵尸数超限: Count={m_activeZombies.Count}, Cap={m_playerStats.ZombieCompanionCap} (base={baseCap}, bonus=+{bonus})");
+                }
             }
 
             for (int i = 0; i < m_activeZombies.Count; i++)
@@ -604,6 +626,7 @@ namespace Game.Gameplay.Infection
             if (actualInfectedCount > 0)
             {
                 OnInfectionBurstResolved?.Invoke(actualInfectedCount);
+                GameEvents.RaiseInfectionBurstVisual(burstCenter, burstRadius, actualInfectedCount);
             }
         }
 
@@ -687,6 +710,22 @@ namespace Game.Gameplay.Infection
         private IReadOnlyList<HumanUnit> GetActiveHumansLazy()
         {
             return m_spawnSystem != null ? m_spawnSystem.ActiveHumans : null;
+        }
+
+        /// <summary>
+        /// 清理 m_activeZombies 中的 null 或已禁用的对象，避免幽灵计数。
+        /// 轻量操作：从后向前遍历移除无效项。
+        /// </summary>
+        private void CleanupInactiveZombies()
+        {
+            for (int i = m_activeZombies.Count - 1; i >= 0; i--)
+            {
+                ZombieCompanionUnit zombie = m_activeZombies[i];
+                if (zombie == null || !zombie.gameObject.activeInHierarchy)
+                {
+                    m_activeZombies.RemoveAt(i);
+                }
+            }
         }
 
         private void ClampZombieToMap(ZombieCompanionUnit zombie)

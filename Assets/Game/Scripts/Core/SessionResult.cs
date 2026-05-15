@@ -17,6 +17,15 @@ namespace Game.Core
         /// <summary>狂潮阶段新增感染数（Final Frenzy 期间感染的人数）</summary>
         public int FrenzyInfectedCount { get; }
 
+        /// <summary>主角直接感染数</summary>
+        public int PlayerDirectInfectedCount { get; }
+
+        /// <summary>僵尸同伴感染数</summary>
+        public int ZombieInfectedCount { get; }
+
+        /// <summary>爆发感染数（包含普通爆发与回响爆发）</summary>
+        public int BurstInfectedCount { get; }
+
         /// <summary>最终评级</summary>
         public SessionRating Rating { get; }
 
@@ -31,12 +40,18 @@ namespace Game.Core
 
         public SessionResult(int infectedCount, int maxZombieCount, int maxCombo,
             int frenzyInfectedCount, SessionRating rating, bool isVictory,
-            float elapsedTime, string upgradeSummary)
+            float elapsedTime, string upgradeSummary,
+            int playerDirectInfectedCount = 0,
+            int zombieInfectedCount = 0,
+            int burstInfectedCount = 0)
         {
             InfectedCount = infectedCount;
             MaxZombieCount = maxZombieCount;
             MaxCombo = maxCombo;
             FrenzyInfectedCount = frenzyInfectedCount;
+            PlayerDirectInfectedCount = playerDirectInfectedCount;
+            ZombieInfectedCount = zombieInfectedCount;
+            BurstInfectedCount = burstInfectedCount;
             Rating = rating;
             IsVictory = isVictory;
             ElapsedTime = elapsedTime;

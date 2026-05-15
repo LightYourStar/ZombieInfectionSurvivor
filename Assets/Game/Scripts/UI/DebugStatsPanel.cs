@@ -171,7 +171,10 @@ namespace Game.UI
             y += lineHeight;
 
             int activeZombieCountNow = m_infectionSystem != null ? m_infectionSystem.ActiveZombieCount : 0;
-            GUI.Label(new Rect(x, y, width, lineHeight), $"当前僵尸数: {activeZombieCountNow} / 最高僵尸数: {m_maxObservedZombieCount}", m_labelStyle);
+            int actualCap = m_playerStats != null ? m_playerStats.ZombieCompanionCap : 0;
+            int baseCap = m_gameConfig != null ? m_gameConfig.ZombieCompanionMaxCount : 0;
+            int bonusCap = actualCap - baseCap;
+            GUI.Label(new Rect(x, y, width, lineHeight), $"僵尸: {activeZombieCountNow}/{actualCap} (基础{baseCap}+升级{bonusCap}) 最高:{m_maxObservedZombieCount}", m_labelStyle);
             y += lineHeight;
 
             int currentCombo = m_comboTracker != null ? m_comboTracker.CurrentCombo : 0;
@@ -460,7 +463,7 @@ namespace Game.UI
                 return "未绑定";
             }
 
-            return $"感染半径 {m_playerStats.InfectionRadius:F2} | 移动速度 {m_playerStats.MoveSpeed:F2} | 僵尸上限 {m_playerStats.ZombieCompanionCap} | 经验倍率 x{m_playerStats.ExpMultiplier:F2}";
+            return $"感染半径 {m_playerStats.InfectionRadius:F2} | 移动速度 {m_playerStats.MoveSpeed:F2} | 经验倍率 x{m_playerStats.ExpMultiplier:F2}";
         }
 
         private string GetSecondsSinceLastInfectionText()

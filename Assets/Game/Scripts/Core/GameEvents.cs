@@ -41,6 +41,16 @@ namespace Game.Core
             OnInfectionSuccess?.Invoke(position);
         }
 
+        /// <summary>
+        /// 感染爆发表现事件。只承载表现层所需的中心点、半径和实际感染数。
+        /// </summary>
+        public static event Action<Vector2, float, int> OnInfectionBurstVisual;
+
+        public static void RaiseInfectionBurstVisual(Vector2 center, float radius, int infectedCount)
+        {
+            OnInfectionBurstVisual?.Invoke(center, radius, infectedCount);
+        }
+
         // ==================== 升级事件 ====================
 
         /// <summary>
@@ -181,6 +191,7 @@ namespace Game.Core
             OnSessionStateChanged = null;
             OnInfectionCountChanged = null;
             OnFinalFrenzyStarted = null;
+            OnInfectionBurstVisual = null;
         }
     }
 }
